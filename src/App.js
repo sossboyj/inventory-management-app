@@ -1,12 +1,13 @@
 import React from 'react';
+import FirestoreTestComponent from './FirestoreTestComponent.js';
 
-function App() {
+const App = () => {
   return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Welcome to the Inventory Management App!</h1>
-      <p>This is where we’ll build our app features.</p>
+    <div>
+      <h1>Inventory Management App</h1>
+      <FirestoreTestComponent />
     </div>
   );
-}
+};
 
 export default App;
