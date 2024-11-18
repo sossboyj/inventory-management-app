@@ -1,11 +1,11 @@
-import React from 'react';
-import FirestoreTestComponent from './FirestoreTestComponent.js';
+import React from "react";
+import ToolList from "./components/ToolList";
 
 const App = () => {
   return (
     <div>
       <h1>Inventory Management App</h1>
-      <FirestoreTestComponent />
+      <ToolList />
     </div>
   );
 };
