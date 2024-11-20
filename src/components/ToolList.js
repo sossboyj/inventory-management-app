@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import { db } from "../firebaseConfig";
 import { collection, onSnapshot } from "firebase/firestore";
 import CheckOutTool from "./CheckOutTool";
+import CheckInTool from "./CheckInTools";
 
 const ToolList = () => {
   const [tools, setTools] = useState([]);
-  const [selectedTool, setSelectedTool] = useState(null);
+  const [selectedToolForCheckout, setSelectedToolForCheckout] = useState(null);
+  const [selectedToolForCheckin, setSelectedToolForCheckin] = useState(null);
 
-  // Fetch tools from Firestore
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "tools"), (snapshot) => {
       const toolsData = snapshot.docs.map((doc) => ({
@@ -20,8 +21,13 @@ const ToolList = () => {
   }, []);
 
   const handleCheckOutSuccess = () => {
-    setSelectedTool(null);
+    setSelectedToolForCheckout(null);
     alert("Tool checked out successfully!");
+  };
+
+  const handleCheckInSuccess = () => {
+    setSelectedToolForCheckin(null);
+    alert("Tool checked in successfully!");
   };
 
   return (
@@ -29,36 +35,29 @@ const ToolList = () => {
       <h1>Tool List</h1>
       <ul>
         {tools.map((tool) => (
-          <li key={tool.id} style={{ marginBottom: "20px" }}>
+          <li key={tool.id}>
             <h2>{tool.name}</h2>
             <p>Availability: {tool.availability ? "Available" : "Checked Out"}</p>
-            {tool.availability && (
-              <button
-                onClick={() => {
-                  console.log("Tool Selected for Checkout:", tool); // Debugging
-                  setSelectedTool(selectedTool?.id === tool.id ? null : tool);
-                }}
-              >
-                {selectedTool?.id === tool.id ? "Hide Form" : "Check Out"}
-              </button>
+            {tool.availability ? (
+              <button onClick={() => setSelectedToolForCheckout(tool)}>Check Out</button>
+            ) : (
+              <button onClick={() => setSelectedToolForCheckin(tool)}>Check In</button>
             )}
-            {/* Render the CheckOutTool form beneath the tool if selected */}
-            {selectedTool?.id === tool.id && (
-              <div
-                style={{
-                  marginTop: "10px",
-                  border: "1px solid #ccc",
-                  padding: "10px",
-                  backgroundColor: "#f9f9f9",
-                  borderRadius: "8px",
-                }}
-              >
-                <CheckOutTool
-                  toolId={tool.id}
-                  toolName={tool.name}
-                  onSuccess={handleCheckOutSuccess}
-                />
-              </div>
+            {/* Render Check-Out Form directly below the selected tool */}
+            {selectedToolForCheckout?.id === tool.id && (
+              <CheckOutTool
+                toolId={tool.id}
+                toolName={tool.name}
+                onSuccess={handleCheckOutSuccess}
+              />
+            )}
+            {/* Render Check-In Form directly below the selected tool */}
+            {selectedToolForCheckin?.id === tool.id && (
+              <CheckInTool
+                toolId={tool.id}
+                toolName={tool.name}
+                onSuccess={handleCheckInSuccess}
+              />
             )}
           </li>
         ))}
