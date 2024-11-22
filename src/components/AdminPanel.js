@@ -6,31 +6,39 @@ import {
   doc,
   deleteDoc,
   updateDoc,
-  addDoc,
 } from "firebase/firestore";
+import AddTools from "./AddTools";
 
 const AdminPanel = () => {
   const [tools, setTools] = useState([]);
-  const [removedTools, setRemovedTools] = useState([]);
-  const [viewRemoved, setViewRemoved] = useState(false); // Toggle Removed Tools View
-  const [editTool, setEditTool] = useState(null); // Tool Being Edited
 
+  // Fetch tools from Firestore
   useEffect(() => {
-    const toolsCollection = viewRemoved ? "removedTools" : "tools";
-    const unsubscribe = onSnapshot(collection(db, toolsCollection), (snapshot) => {
+    const unsubscribe = onSnapshot(collection(db, "tools"), (snapshot) => {
       const toolsData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-      viewRemoved ? setRemovedTools(toolsData) : setTools(toolsData);
+      setTools(toolsData);
     });
     return () => unsubscribe();
-  }, [viewRemoved]);
+  }, []);
 
-  const handleDelete = async (id, tool) => {
+  // Handle updates to a specific field in Firestore
+  const handleFieldUpdate = async (id, field, value) => {
     try {
-      const { id: toolId, ...toolData } = tool;
-      await addDoc(collection(db, "removedTools"), { ...toolData });
+      await updateDoc(doc(db, "tools", id), {
+        [field]: value,
+      });
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+      alert("Failed to update the field. Check your permissions.");
+    }
+  };
+
+  // Handle delete on row double-click
+  const handleDelete = async (id) => {
+    try {
       await deleteDoc(doc(db, "tools", id));
       alert("Tool removed successfully!");
     } catch (error) {
@@ -39,81 +47,112 @@ const AdminPanel = () => {
     }
   };
 
-  const handleReAddTool = async (tool) => {
-    try {
-      const { id: toolId, ...toolData } = tool;
-      await addDoc(collection(db, "tools"), { ...toolData });
-      await deleteDoc(doc(db, "removedTools", tool.id));
-      alert("Tool re-added successfully!");
-    } catch (error) {
-      console.error("Error re-adding tool:", error);
-    }
-  };
-
-  const handleEditSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await updateDoc(doc(db, "tools", editTool.id), {
-        name: editTool.name,
-        availability: editTool.availability,
-      });
-      setEditTool(null);
-      alert("Tool updated successfully!");
-    } catch (error) {
-      console.error("Error updating tool:", error);
-    }
-  };
-
   return (
-    <div>
+    <div style={{ padding: "20px" }}>
       <h1>Admin Panel</h1>
-      <div>
-        <button onClick={() => setViewRemoved(false)}>Active Tools</button>
-        <button onClick={() => setViewRemoved(true)}>Removed Tools</button>
+
+      {/* Add Tools Section */}
+      <div style={{ marginBottom: "20px" }}>
+        <h2>Add a New Tool</h2>
+        <AddTools />
       </div>
-      {viewRemoved ? (
-        <div>
-          <h2>Removed Tools</h2>
-          <ul>
-            {removedTools.map((tool) => (
-              <li key={tool.id}>
-                <strong>{tool.name}</strong>
-                <button onClick={() => handleReAddTool(tool)}>Re-Add Tool</button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <div>
-          <h2>Active Tools</h2>
-          <ul>
+
+      {/* Instruction Message */}
+      <div style={{ marginBottom: "10px", color: "gray" }}>
+        <p>
+          <strong>Note:</strong> Double-click on a row to delete a tool. Click on a cell
+          to edit its value.
+        </p>
+      </div>
+
+      {/* Inventory Table */}
+      <div>
+        <h2>Inventory</h2>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead>
+            <tr>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Tool Name</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Model</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Price</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Quantity</th>
+              <th style={{ border: "1px solid #ccc", padding: "8px" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
             {tools.map((tool) => (
-              <li key={tool.id}>
-                <strong>{tool.name}</strong>
-                <p>{tool.availability ? "Available" : "Checked Out"}</p>
-                <button onClick={() => handleDelete(tool.id, tool)}>Remove</button>
-                <button onClick={() => setEditTool(tool)}>Edit</button>
-                {editTool?.id === tool.id && (
-                  <form onSubmit={handleEditSubmit}>
-                    <label>
-                      Name:
-                      <input
-                        type="text"
-                        value={editTool.name}
-                        onChange={(e) =>
-                          setEditTool({ ...editTool, name: e.target.value })
-                        }
-                      />
-                    </label>
-                    <button type="submit">Save</button>
-                    <button onClick={() => setEditTool(null)}>Cancel</button>
-                  </form>
-                )}
-              </li>
+              <tr
+                key={tool.id}
+                onDoubleClick={() => handleDelete(tool.id)} // Remove row on double-click
+                style={{ cursor: "pointer" }}
+              >
+                {/* Editable Tool Name */}
+                <td
+                  style={{ border: "1px solid #ccc", padding: "8px" }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    handleFieldUpdate(tool.id, "name", e.target.textContent.trim())
+                  }
+                >
+                  {tool.name}
+                </td>
+
+                {/* Editable Model */}
+                <td
+                  style={{ border: "1px solid #ccc", padding: "8px" }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    handleFieldUpdate(tool.id, "model", e.target.textContent.trim())
+                  }
+                >
+                  {tool.model || "N/A"}
+                </td>
+
+                {/* Editable Price */}
+                <td
+                  style={{ border: "1px solid #ccc", padding: "8px" }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    handleFieldUpdate(tool.id, "price", parseFloat(e.target.textContent))
+                  }
+                >
+                  ${tool.price || "0"}
+                </td>
+
+                {/* Editable Quantity */}
+                <td
+                  style={{ border: "1px solid #ccc", padding: "8px" }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    handleFieldUpdate(
+                      tool.id,
+                      "quantity",
+                      parseInt(e.target.textContent) || 0
+                    )
+                  }
+                >
+                  {tool.quantity}
+                </td>
+
+                {/* Editable Status */}
+                <td
+                  style={{ border: "1px solid #ccc", padding: "8px" }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    handleFieldUpdate(tool.id, "status", e.target.textContent.trim())
+                  }
+                >
+                  {tool.status}
+                </td>
+              </tr>
             ))}
-          </ul>
-        </div>
-      )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

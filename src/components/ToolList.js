@@ -15,8 +15,10 @@ const ToolList = () => {
         id: doc.id,
         ...doc.data(),
       }));
+      console.log("Fetched tools:", toolsData); // Debug log
       setTools(toolsData);
     });
+
     return () => unsubscribe();
   }, []);
 
@@ -29,6 +31,8 @@ const ToolList = () => {
     setSelectedToolForCheckin(null);
     alert("Tool checked in successfully!");
   };
+
+  if (!tools.length) return <p>No tools available. Add tools to the inventory.</p>;
 
   return (
     <div>
@@ -43,7 +47,6 @@ const ToolList = () => {
             ) : (
               <button onClick={() => setSelectedToolForCheckin(tool)}>Check In</button>
             )}
-            {/* Render Check-Out Form directly below the selected tool */}
             {selectedToolForCheckout?.id === tool.id && (
               <CheckOutTool
                 toolId={tool.id}
@@ -51,7 +54,6 @@ const ToolList = () => {
                 onSuccess={handleCheckOutSuccess}
               />
             )}
-            {/* Render Check-In Form directly below the selected tool */}
             {selectedToolForCheckin?.id === tool.id && (
               <CheckInTool
                 toolId={tool.id}
