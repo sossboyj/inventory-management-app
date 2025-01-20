@@ -13,8 +13,21 @@ const AddTools = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!toolName.trim() || !model.trim() || !price || price <= 0) {
-      alert("Please fill out all required fields correctly.");
+    // Enhanced Validation Logic
+    if (!toolName.trim()) {
+      alert("Tool Name is required.");
+      return;
+    }
+    if (!model.trim()) {
+      alert("Model is required.");
+      return;
+    }
+    if (price === "" || price <= 0) {
+      alert("Please enter a valid price greater than 0.");
+      return;
+    }
+    if (quantity < 1) {
+      alert("Quantity must be at least 1.");
       return;
     }
 
@@ -22,10 +35,10 @@ const AddTools = () => {
     try {
       const toolData = {
         name: toolName.trim(),
-        quantity: quantity,
+        quantity,
         model: model.trim(),
         price: parseFloat(price),
-        status: status,
+        status,
         availability: true,
         checkedOutBy: null,
         duration: null,
@@ -36,6 +49,7 @@ const AddTools = () => {
 
       await addDoc(collection(db, "tools"), toolData);
 
+      // Clear form fields after successful submission
       setToolName("");
       setQuantity(1);
       setModel("");
@@ -44,7 +58,7 @@ const AddTools = () => {
 
       alert("Tool added successfully!");
     } catch (error) {
-      console.error("Error adding tool: ", error);
+      console.error("Error adding tool:", error);
       alert("Failed to add tool. Please try again.");
     } finally {
       setLoading(false);
@@ -114,7 +128,7 @@ const AddTools = () => {
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             placeholder="Enter price"
-            min="0"
+            min="0.01"
             step="0.01"
             required
             style={{
