@@ -1,6 +1,15 @@
-import { collection, addDoc } from "firebase/firestore";
-import { db } from "../firebaseConfig.js";
 import React, { useState } from "react";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "../firebaseConfig";
+import {
+  TextField,
+  Button,
+  Box,
+  Typography,
+  Select,
+  MenuItem,
+  CircularProgress,
+} from "@mui/material";
 
 const AddTools = () => {
   const [toolName, setToolName] = useState("");
@@ -22,7 +31,7 @@ const AddTools = () => {
       alert("Model is required.");
       return;
     }
-    if (price === "" || price <= 0) {
+    if (!price || isNaN(price) || parseFloat(price) <= 0) {
       alert("Please enter a valid price greater than 0.");
       return;
     }
@@ -35,7 +44,7 @@ const AddTools = () => {
     try {
       const toolData = {
         name: toolName.trim(),
-        quantity,
+        quantity: parseInt(quantity),
         model: model.trim(),
         price: parseFloat(price),
         status,
@@ -66,114 +75,83 @@ const AddTools = () => {
   };
 
   return (
-    <div style={{ margin: "20px" }}>
-      <h2>Add a New Tool</h2>
-      <form onSubmit={handleSubmit} style={{ maxWidth: "500px" }}>
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ display: "block", fontWeight: "bold" }}>Tool Name:</label>
-          <input
-            type="text"
-            value={toolName}
-            onChange={(e) => setToolName(e.target.value)}
-            placeholder="Enter tool name"
-            required
-            style={{
-              width: "100%",
-              padding: "8px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ display: "block", fontWeight: "bold" }}>Quantity:</label>
-          <input
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-            placeholder="Enter quantity"
-            min="1"
-            required
-            style={{
-              width: "100%",
-              padding: "8px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ display: "block", fontWeight: "bold" }}>Model:</label>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="Enter model number"
-            required
-            style={{
-              width: "100%",
-              padding: "8px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ display: "block", fontWeight: "bold" }}>Price:</label>
-          <input
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="Enter price"
-            min="0.01"
-            step="0.01"
-            required
-            style={{
-              width: "100%",
-              padding: "8px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "10px" }}>
-          <label style={{ display: "block", fontWeight: "bold" }}>Status:</label>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-            }}
-          >
-            <option value="Available">Available</option>
-            <option value="Checked Out">Checked Out</option>
-            <option value="Under Maintenance">Under Maintenance</option>
-          </select>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            backgroundColor: loading ? "#ccc" : "#007BFF",
-            color: "#fff",
-            padding: "10px 15px",
-            border: "none",
-            borderRadius: "4px",
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
+    <Box
+      component="form"
+      onSubmit={handleSubmit}
+      sx={{
+        maxWidth: 500,
+        margin: "0 auto",
+        padding: 3,
+        boxShadow: 3,
+        borderRadius: 2,
+        backgroundColor: "#f9f9f9",
+      }}
+    >
+      <Typography variant="h6" gutterBottom>
+        Add a New Tool
+      </Typography>
+      <TextField
+        label="Tool Name"
+        value={toolName}
+        onChange={(e) => setToolName(e.target.value)}
+        fullWidth
+        required
+        margin="normal"
+      />
+      <TextField
+        label="Quantity"
+        type="number"
+        value={quantity}
+        onChange={(e) => setQuantity(Number(e.target.value))}
+        fullWidth
+        required
+        margin="normal"
+        inputProps={{ min: 1 }}
+      />
+      <TextField
+        label="Model"
+        value={model}
+        onChange={(e) => setModel(e.target.value)}
+        fullWidth
+        required
+        margin="normal"
+      />
+      <TextField
+        label="Price"
+        type="number"
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        fullWidth
+        required
+        margin="normal"
+        inputProps={{ min: 0.01, step: 0.01 }}
+      />
+      <Box margin="normal">
+        <Typography variant="body2" gutterBottom>
+          Status
+        </Typography>
+        <Select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          fullWidth
+          required
         >
-          {loading ? "Adding Tool..." : "Add Tool"}
-        </button>
-      </form>
-    </div>
+          <MenuItem value="Available">Available</MenuItem>
+          <MenuItem value="Checked Out">Checked Out</MenuItem>
+          <MenuItem value="Under Maintenance">Under Maintenance</MenuItem>
+        </Select>
+      </Box>
+      <Button
+        type="submit"
+        variant="contained"
+        color="primary"
+        fullWidth
+        disabled={loading}
+        sx={{ marginTop: 2 }}
+      >
+        {loading ? <CircularProgress size={24} /> : "Add Tool"}
+      </Button>
+    </Box>
   );
 };
 

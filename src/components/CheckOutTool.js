@@ -1,53 +1,73 @@
 import React, { useState } from "react";
 import { db } from "../firebaseConfig";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, collection, addDoc } from "firebase/firestore";
 
 const CheckOutTool = ({ toolId, toolName, onSuccess }) => {
   const [userName, setUserName] = useState("");
-  const [jobSite, setJobSite] = useState("");
-  const [duration, setDuration] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [error, setError] = useState("");
 
   const handleCheckOut = async (e) => {
     e.preventDefault();
 
-    console.log("Checkout button clicked"); // Debugging
-
-    if (!userName || !jobSite || !duration || !returnDate) {
-      setError("All fields are required!");
-      console.log("Error: Missing required fields"); // Debugging
+    if (!userName.trim() || !returnDate) {
+      setError("User Name and Expected Return Date are required!");
       return;
     }
 
     try {
       const toolRef = doc(db, "tools", toolId);
 
-      console.log("Updating Firestore with:", {
-        toolId,
-        userName,
-        jobSite,
-        duration,
-        returnDate,
-      }); // Debugging
-
+      // Update the "tools" collection
       await updateDoc(toolRef, {
         availability: false,
-        checkedOutBy: userName,
-        jobSite: jobSite,
-        duration: duration,
-        returnDate: returnDate,
+        checkedOutBy: userName.trim(),
+        returnDate,
+        status: "Checked Out",
       });
 
-      console.log("Tool successfully checked out!"); // Debugging
+      // Add entry to "checkoutHistory" collection
+      await addDoc(collection(db, "checkoutHistory"), {
+        toolId,
+        toolName,
+        checkedOutBy: userName.trim(),
+        returnDate,
+        checkoutDate: new Date().toISOString(),
+        status: "Checked Out",
+      });
+
+      // Log the notification in the "notifications" collection
+      await addDoc(collection(db, "notifications"), {
+        type: "Check-Out",
+        toolName,
+        userName: userName.trim(),
+        timestamp: new Date().toISOString(),
+        status: "Unread",
+      });
+
+      // Reset states
       onSuccess();
       setUserName("");
-      setJobSite("");
-      setDuration("");
       setReturnDate("");
       setError("");
+
+      // Admin notification with a styled alert
+      const notification = document.createElement("div");
+      notification.style.backgroundColor = "#f44336"; // Red for attention
+      notification.style.color = "white";
+      notification.style.padding = "10px";
+      notification.style.borderRadius = "5px";
+      notification.style.marginTop = "10px";
+      notification.style.textAlign = "center";
+      notification.textContent = `${toolName} has been successfully checked out by ${userName}.`;
+      document.body.appendChild(notification);
+
+      // Remove notification after 3 seconds
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
     } catch (err) {
-      console.error("Error checking out tool:", err); // Debugging
+      console.error("Error during checkout:", err);
       setError("Failed to check out the tool. Try again.");
     }
   };
@@ -64,28 +84,6 @@ const CheckOutTool = ({ toolId, toolName, onSuccess }) => {
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
             placeholder="Enter your name"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="jobSite">Job Site:</label>
-          <input
-            id="jobSite"
-            type="text"
-            value={jobSite}
-            onChange={(e) => setJobSite(e.target.value)}
-            placeholder="Enter the job site"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="duration">Duration (in days):</label>
-          <input
-            id="duration"
-            type="number"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            placeholder="Enter duration in days"
             required
           />
         </div>
