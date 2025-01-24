@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDt-Qt4jmqeJUJyit-lw3reHusIChp06yg",
   authDomain: "construction-inventory-app.firebaseapp.com",
@@ -13,12 +14,8 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const firebaseApp = initializeApp(firebaseConfig);
-
-// Initialize Firestore
 const db = getFirestore(firebaseApp);
-
-// Initialize Firebase Auth
 const auth = getAuth(firebaseApp);
 
-// Export as named exports
+// Export initialized Firebase services
 export { firebaseApp, db, auth };

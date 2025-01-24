@@ -12,8 +12,12 @@ import {
   Chip,
   CardActions,
   Button,
+  CardMedia,
 } from "@mui/material";
 import { Link } from "react-router-dom";
+import BuildIcon from "@mui/icons-material/Build";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import HighlightOffIcon from "@mui/icons-material/HighlightOff";
 
 const ToolList = () => {
   const [tools, setTools] = useState([]);
@@ -32,33 +36,28 @@ const ToolList = () => {
           model: doc.data().model || "N/A",
           price: doc.data().price || 0,
           availability: doc.data().availability || false,
+          imageUrl: doc.data().imageUrl || null, // Include tool image URL
         }));
-  
-        console.log("Fetched Tools:", toolsData); // Debugging log
         setTools(toolsData);
       },
       (error) => {
-        console.error("Error fetching tools:", error); // Debugging log
+        console.error("Error fetching tools:", error);
       }
     );
-  
+
     return () => unsubscribe();
   }, []);
-  
 
-  // Handle successful check-out
   const handleCheckOutSuccess = () => {
     setSelectedToolForCheckout(null);
     alert("Tool checked out successfully!");
   };
 
-  // Handle successful check-in
   const handleCheckInSuccess = () => {
     setSelectedToolForCheckin(null);
     alert("Tool checked in successfully!");
   };
 
-  // Display message if no tools are available
   if (!tools.length) {
     return (
       <Typography
@@ -80,13 +79,24 @@ const ToolList = () => {
         component="h1"
         align="center"
         gutterBottom
-        sx={{ fontFamily: "Arial, Helvetica, sans-serif", fontWeight: "bold", color: "#1976d2" }}
+        sx={{
+          fontFamily: "Arial, Helvetica, sans-serif",
+          fontWeight: "bold",
+          color: "#1976d2",
+        }}
       >
         Inventory Management App
       </Typography>
 
       {/* Navigation Buttons */}
-      <Box sx={{ marginBottom: 4, display: "flex", gap: 2, justifyContent: "center" }}>
+      <Box
+        sx={{
+          marginBottom: 4,
+          display: "flex",
+          gap: 2,
+          justifyContent: "center",
+        }}
+      >
         <Button
           variant="contained"
           color="primary"
@@ -122,10 +132,28 @@ const ToolList = () => {
                 boxShadow: 3,
                 borderRadius: 2,
                 padding: 2,
+                "&:hover": {
+                  transform: "scale(1.03)",
+                  transition: "0.3s",
+                },
               }}
             >
+              {tool.imageUrl && (
+                <CardMedia
+                  component="img"
+                  height="140"
+                  image={tool.imageUrl}
+                  alt={tool.name}
+                  sx={{ borderRadius: "4px" }}
+                />
+              )}
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography
+                  variant="h6"
+                  gutterBottom
+                  sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <BuildIcon />
                   {tool.name}
                 </Typography>
                 <Typography variant="body2" color="textSecondary">
@@ -140,6 +168,13 @@ const ToolList = () => {
                 <Box mt={2}>
                   <Chip
                     label={tool.availability ? "Available" : "Checked Out"}
+                    icon={
+                      tool.availability ? (
+                        <CheckCircleIcon />
+                      ) : (
+                        <HighlightOffIcon />
+                      )
+                    }
                     color={tool.availability ? "success" : "warning"}
                     size="small"
                   />

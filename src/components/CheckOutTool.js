@@ -1,57 +1,70 @@
 import React, { useState } from "react";
 import { db } from "../firebaseConfig";
 import { doc, updateDoc, collection, addDoc } from "firebase/firestore";
+import { useAuth } from "../AuthProvider"; // Use the useAuth hook for user information
 
 const CheckOutTool = ({ toolId, toolName, onSuccess }) => {
-  const [userName, setUserName] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [error, setError] = useState("");
+  const { user } = useAuth(); // Get logged-in user information
 
   const handleCheckOut = async (e) => {
     e.preventDefault();
 
-    if (!userName.trim() || !returnDate) {
-      setError("User Name and Expected Return Date are required!");
+    if (!returnDate) {
+      setError("Expected Return Date is required!");
       return;
     }
 
     try {
       const toolRef = doc(db, "tools", toolId);
 
-      // Update the "tools" collection
+      // 1) Update the tool document
       await updateDoc(toolRef, {
         availability: false,
-        checkedOutBy: userName.trim(),
+        checkedOutBy: user?.displayName || "Unknown User", // Use logged-in user's name or fallback
         returnDate,
         status: "Checked Out",
       });
 
-      // Add entry to "checkoutHistory" collection
+      // 2) Log the check-out event in "checkoutHistory"
       await addDoc(collection(db, "checkoutHistory"), {
         toolId,
         toolName,
-        checkedOutBy: userName.trim(),
+        checkedOutBy: user?.displayName || "Unknown User",
         returnDate,
         checkoutDate: new Date().toISOString(),
         status: "Checked Out",
+        userId: user?.uid || null, // Ensure userId is recorded
       });
 
-      // Log the notification in the "notifications" collection
+      // 3) Add a user notification
+      if (user?.uid) {
+        await addDoc(collection(db, "userNotifications"), {
+          userId: user.uid,
+          message: `The tool "${toolName}" has been successfully checked out.`,
+          timestamp: new Date().toISOString(),
+          status: "Unread",
+        });
+      }
+
+      // 4) Log an admin notification in "notifications"
       await addDoc(collection(db, "notifications"), {
         type: "Check-Out",
         toolName,
-        userName: userName.trim(),
+        toolId,
+        userId: user?.uid || null,
+        userName: user?.displayName || "Unknown User",
         timestamp: new Date().toISOString(),
         status: "Unread",
       });
 
-      // Reset states
+      // 5) Reset state and notify success
       onSuccess();
-      setUserName("");
-      setReturnDate("");
       setError("");
+      setReturnDate("");
 
-      // Admin notification with a styled alert
+      // 6) Display admin notification
       const notification = document.createElement("div");
       notification.style.backgroundColor = "#f44336"; // Red for attention
       notification.style.color = "white";
@@ -59,10 +72,14 @@ const CheckOutTool = ({ toolId, toolName, onSuccess }) => {
       notification.style.borderRadius = "5px";
       notification.style.marginTop = "10px";
       notification.style.textAlign = "center";
-      notification.textContent = `${toolName} has been successfully checked out by ${userName}.`;
+      notification.style.position = "fixed";
+      notification.style.top = "80px";
+      notification.style.left = "50%";
+      notification.style.transform = "translateX(-50%)";
+      notification.style.zIndex = "9999";
+      notification.textContent = `${toolName} has been successfully checked out by ${user?.displayName || "Unknown User"}.`;
       document.body.appendChild(notification);
 
-      // Remove notification after 3 seconds
       setTimeout(() => {
         notification.remove();
       }, 3000);
@@ -76,17 +93,6 @@ const CheckOutTool = ({ toolId, toolName, onSuccess }) => {
     <div>
       <h2>Check Out Tool: {toolName}</h2>
       <form onSubmit={handleCheckOut}>
-        <div>
-          <label htmlFor="userName">User Name:</label>
-          <input
-            id="userName"
-            type="text"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            placeholder="Enter your name"
-            required
-          />
-        </div>
         <div>
           <label htmlFor="returnDate">Expected Return Date:</label>
           <input

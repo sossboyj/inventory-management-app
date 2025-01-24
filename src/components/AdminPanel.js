@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { db } from "../firebaseConfig";
 import { collection, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import AddTools from "./AddTools";
+import { useAuth } from "../AuthProvider"; // Import useAuth for role-based access
+import { Navigate } from "react-router-dom";
 import {
   Container,
   Typography,
@@ -24,9 +26,14 @@ import {
   DialogContentText,
   DialogTitle,
   Chip,
+  Divider,
 } from "@mui/material";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ExitToAppIcon from "@mui/icons-material/ExitToApp";
 
 const AdminPanel = () => {
+  const { user, role } = useAuth(); // Access user and role from AuthProvider
+
   // State variables
   const [tools, setTools] = useState([]);
   const [editTool, setEditTool] = useState(null);
@@ -35,12 +42,20 @@ const AdminPanel = () => {
   const [success, setSuccess] = useState("");
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [toolToDelete, setToolToDelete] = useState(null);
+
+  // States for logs and notifications
   const [checkoutHistory, setCheckoutHistory] = useState([]);
   const [checkInHistory, setCheckInHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
+  // Guard for admin role
+  const isAdmin = user && role === "admin";
+
   // Fetch data from Firestore
   useEffect(() => {
+    if (!isAdmin) return;
+
+    // 1) Tools
     const unsubscribeTools = onSnapshot(
       collection(db, "tools"),
       (snapshot) => {
@@ -56,6 +71,7 @@ const AdminPanel = () => {
       }
     );
 
+    // 2) Checkout History
     const unsubscribeCheckoutHistory = onSnapshot(
       collection(db, "checkoutHistory"),
       (snapshot) => {
@@ -71,6 +87,7 @@ const AdminPanel = () => {
       }
     );
 
+    // 3) Check-In History
     const unsubscribeCheckInHistory = onSnapshot(
       collection(db, "checkInHistory"),
       (snapshot) => {
@@ -86,6 +103,7 @@ const AdminPanel = () => {
       }
     );
 
+    // 4) Notifications
     const unsubscribeNotifications = onSnapshot(
       collection(db, "notifications"),
       (snapshot) => {
@@ -107,7 +125,12 @@ const AdminPanel = () => {
       unsubscribeCheckInHistory();
       unsubscribeNotifications();
     };
-  }, []);
+  }, [isAdmin]);
+
+  // Redirect if not an admin
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
 
   // Delete a tool
   const handleDelete = async () => {
@@ -153,6 +176,23 @@ const AdminPanel = () => {
     }
   };
 
+  // Mark all notifications as read
+  const markAllAsRead = async () => {
+    try {
+      const unreadNotifications = notifications.filter(
+        (notification) => notification.status === "Unread"
+      );
+      const updatePromises = unreadNotifications.map((notification) =>
+        updateDoc(doc(db, "notifications", notification.id), { status: "Read" })
+      );
+      await Promise.all(updatePromises);
+      setSuccess("All unread notifications marked as read.");
+    } catch (err) {
+      console.error("Error marking notifications as read:", err);
+      setError("Failed to mark notifications as read.");
+    }
+  };
+
   // Filter tools based on search query
   const filteredTools = tools.filter((tool) =>
     tool.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -169,6 +209,7 @@ const AdminPanel = () => {
         Add a New Tool
       </Typography>
       <AddTools />
+      <Divider sx={{ my: 4 }} />
 
       {/* Search Tools */}
       <TextField
@@ -249,11 +290,7 @@ const AdminPanel = () => {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleEditSubmit}
-                      >
+                      <Button variant="contained" color="primary" onClick={handleEditSubmit}>
                         Save
                       </Button>
                       <Button
@@ -270,7 +307,9 @@ const AdminPanel = () => {
                     <TableCell>{tool.name}</TableCell>
                     <TableCell>{tool.model}</TableCell>
                     <TableCell>{tool.quantity}</TableCell>
-                    <TableCell>${tool.price ? tool.price.toFixed(2) : "0.00"}</TableCell>
+                    <TableCell>
+                      ${tool.price ? tool.price.toFixed(2) : "0.00"}
+                    </TableCell>
                     <TableCell>{tool.status}</TableCell>
                     <TableCell>
                       <Button
@@ -298,6 +337,7 @@ const AdminPanel = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      <Divider sx={{ my: 4 }} />
 
       {/* Checkout History Table */}
       <Typography variant="h6" sx={{ mt: 4 }}>
@@ -314,17 +354,28 @@ const AdminPanel = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {checkoutHistory.map((history) => (
-              <TableRow key={history.id}>
-                <TableCell>{history.toolName}</TableCell>
-                <TableCell>{history.checkedOutBy}</TableCell>
-                <TableCell>{history.returnDate}</TableCell>
-                <TableCell>{new Date(history.checkoutDate).toLocaleString()}</TableCell>
+            {checkoutHistory.length > 0 ? (
+              checkoutHistory.map((history) => (
+                <TableRow key={history.id}>
+                  <TableCell>{history.toolName}</TableCell>
+                  <TableCell>{history.checkedOutBy}</TableCell>
+                  <TableCell>{history.returnDate || "N/A"}</TableCell>
+                  <TableCell>
+                    {new Date(history.checkoutDate).toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  No checkout history available.
+                </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </TableContainer>
+      <Divider sx={{ my: 4 }} />
 
       {/* Check-In History Table */}
       <Typography variant="h6" sx={{ mt: 4 }}>
@@ -340,21 +391,40 @@ const AdminPanel = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {checkInHistory.map((history) => (
-              <TableRow key={history.id}>
-                <TableCell>{history.toolName}</TableCell>
-                <TableCell>{history.checkedInBy}</TableCell>
-                <TableCell>{new Date(history.checkInDate).toLocaleString()}</TableCell>
+            {checkInHistory.length > 0 ? (
+              checkInHistory.map((history) => (
+                <TableRow key={history.id}>
+                  <TableCell>{history.toolName}</TableCell>
+                  <TableCell>{history.checkedInBy}</TableCell>
+                  <TableCell>
+                    {new Date(history.checkInDate).toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={3} align="center">
+                  No check-in history available.
+                </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </TableContainer>
+      <Divider sx={{ my: 4 }} />
 
       {/* Notifications Table */}
       <Typography variant="h6" sx={{ mt: 4 }}>
         Notifications
       </Typography>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={markAllAsRead}
+        sx={{ marginBottom: 2 }}
+      >
+        Mark All as Read
+      </Button>
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -371,6 +441,13 @@ const AdminPanel = () => {
               <TableRow key={notification.id}>
                 <TableCell>
                   <Chip
+                    icon={
+                      notification.type === "Check-In" ? (
+                        <CheckCircleIcon />
+                      ) : notification.type === "Check-Out" ? (
+                        <ExitToAppIcon />
+                      ) : null
+                    }
                     label={notification.type}
                     color={
                       notification.type === "Check-In"
@@ -390,7 +467,9 @@ const AdminPanel = () => {
                     size="small"
                   />
                 </TableCell>
-                <TableCell>{new Date(notification.timestamp).toLocaleString()}</TableCell>
+                <TableCell>
+                  {new Date(notification.timestamp).toLocaleString()}
+                </TableCell>
                 <TableCell>
                   {notification.status === "Unread" && (
                     <Button
@@ -407,27 +486,7 @@ const AdminPanel = () => {
           </TableBody>
         </Table>
       </TableContainer>
-
-      {/* Confirmation Dialog */}
-      <Dialog
-        open={confirmDialogOpen}
-        onClose={() => setConfirmDialogOpen(false)}
-      >
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this tool? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDialogOpen(false)} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={handleDelete} color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <Divider sx={{ my: 4 }} />
 
       {/* Snackbar Notifications */}
       <Snackbar
@@ -448,6 +507,27 @@ const AdminPanel = () => {
           {success}
         </Alert>
       </Snackbar>
+
+      {/* Confirmation Dialog for Deletion */}
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this tool? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleDelete} color="error">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

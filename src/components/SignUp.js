@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { getAuth, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore"; // Import Firestore methods
+import { db } from "../firebaseConfig"; // Import Firestore instance
 import {
   Container,
   TextField,
@@ -33,11 +39,23 @@ const SignUp = () => {
 
     try {
       setLoading(true);
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
       const user = userCredential.user;
 
       // Update the user's profile with their full name
       await updateProfile(user, { displayName: fullName });
+
+      // Add user data to the Firestore "users" collection
+      await setDoc(doc(db, "users", user.uid), {
+        displayName: fullName,
+        email: user.email,
+        role: "user", // Default role, can be adjusted later for admin
+        createdAt: new Date().toISOString(),
+      });
 
       setLoading(false);
       setSuccess(true);
