@@ -1,28 +1,39 @@
 import React, { useState } from "react";
-import QrScanner from "react-qr-scanner";
+// Rename the import to match the official docs usage:
+import QrReader from "react-qr-scanner";
 import { db } from "../firebaseConfig";
-import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc
+} from "firebase/firestore";
 import { Typography, Box } from "@mui/material";
 
 const BarcodeScanner = () => {
   const [scannedData, setScannedData] = useState(null);
   const [error, setError] = useState(null);
 
+  // This is called whenever the library detects a scan result
   const handleScan = async (data) => {
+    // 'data' will be null or a string in react-qr-scanner
     if (!data) return;
 
-    setScannedData(data.text); // Use `data.text` for the scanned barcode data
+    setScannedData(data);
 
     try {
       const toolsRef = collection(db, "tools");
-      const q = query(toolsRef, where("barcode", "==", data.text)); // Match barcode
+      // Assuming your Firestore doc has a field named "barcode"
+      // that matches the scanned string
+      const q = query(toolsRef, where("barcode", "==", data));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
         const docRef = querySnapshot.docs[0].ref;
 
         await updateDoc(docRef, {
-          lastScannedLocation: "Current Location", // Replace with actual location logic
+          lastScannedLocation: "Current Location" // Replace with actual logic
         });
 
         alert("Tool location updated successfully!");
@@ -35,14 +46,16 @@ const BarcodeScanner = () => {
     }
   };
 
+  // Called if there's a camera access or scanning error
   const handleError = (err) => {
     console.error(err);
     setError("QR Scanner Error: Unable to process the scan.");
   };
 
+  // Style for the camera preview window
   const previewStyle = {
     height: 240,
-    width: 320,
+    width: 320
   };
 
   return (
@@ -51,12 +64,14 @@ const BarcodeScanner = () => {
         Scan Tool Barcode
       </Typography>
       {error && <Typography color="error">{error}</Typography>}
-      <QrScanner
+
+      <QrReader
         delay={300}
         onError={handleError}
         onScan={handleScan}
         style={previewStyle}
       />
+
       {scannedData && (
         <Typography variant="body1" color="primary" sx={{ marginTop: 2 }}>
           Scanned Data: {scannedData}

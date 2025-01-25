@@ -13,11 +13,13 @@ import {
   CardActions,
   Button,
   CardMedia,
+  IconButton,
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import BuildIcon from "@mui/icons-material/Build";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import HighlightOffIcon from "@mui/icons-material/HighlightOff";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 const ToolList = () => {
   const [tools, setTools] = useState([]);
@@ -72,27 +74,42 @@ const ToolList = () => {
   }
 
   return (
-    <Box sx={{ padding: 4 }}>
+    <Box sx={{ padding: { xs: 2, md: 4 } }}>
       {/* App Header */}
-      <Typography
-        variant="h2"
-        component="h1"
-        align="center"
-        gutterBottom
+      <Box
         sx={{
-          fontFamily: "Arial, Helvetica, sans-serif",
-          fontWeight: "bold",
-          color: "#1976d2",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 2,
         }}
       >
-        Inventory Management App
-      </Typography>
+        <Typography
+          variant="h4"
+          component="h1"
+          sx={{
+            fontWeight: "bold",
+            color: "#1976d2",
+            textAlign: { xs: "center", md: "left" },
+            flexGrow: 1,
+          }}
+        >
+          Tool Inventory
+        </Typography>
+        <IconButton
+          component={Link}
+          to="/"
+          sx={{ display: { xs: "flex", md: "none" }, color: "#1976d2" }}
+        >
+          <ArrowBackIcon />
+        </IconButton>
+      </Box>
 
       {/* Navigation Buttons */}
       <Box
         sx={{
-          marginBottom: 4,
-          display: "flex",
+          mb: 4,
+          display: { xs: "block", md: "flex" },
           gap: 2,
           justifyContent: "center",
         }}
@@ -102,7 +119,7 @@ const ToolList = () => {
           color="primary"
           component={Link}
           to="/"
-          sx={{ textTransform: "none" }}
+          sx={{ textTransform: "none", mb: { xs: 1, md: 0 } }}
         >
           Tool List
         </Button>
@@ -117,24 +134,20 @@ const ToolList = () => {
         </Button>
       </Box>
 
-      {/* Tool Inventory Header */}
-      <Typography variant="h4" component="h2" align="center" gutterBottom>
-        Tool Inventory
-      </Typography>
-
       {/* Tool Inventory Cards */}
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         {tools.map((tool) => (
           <Grid item xs={12} sm={6} md={4} key={tool.id}>
             <Card
               sx={{
                 backgroundColor: "#f9f9f9",
-                boxShadow: 3,
+                boxShadow: 2,
                 borderRadius: 2,
                 padding: 2,
+                transition: "0.3s",
                 "&:hover": {
                   transform: "scale(1.03)",
-                  transition: "0.3s",
+                  boxShadow: 4,
                 },
               }}
             >
@@ -180,7 +193,7 @@ const ToolList = () => {
                   />
                 </Box>
               </CardContent>
-              <CardActions>
+              <CardActions sx={{ justifyContent: "center" }}>
                 {tool.availability ? (
                   <Button
                     variant="contained"
