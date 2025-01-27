@@ -3,6 +3,7 @@ import { db } from "../firebaseConfig";
 import { collection, onSnapshot } from "firebase/firestore";
 import CheckOutTool from "./CheckOutTool";
 import CheckInTool from "./CheckInTools";
+import CheckInOut from "./checkInOut"; // Correct component name
 import {
   Box,
   Grid,
@@ -14,6 +15,7 @@ import {
   Button,
   CardMedia,
   IconButton,
+  Dialog,
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import BuildIcon from "@mui/icons-material/Build";
@@ -25,6 +27,7 @@ const ToolList = () => {
   const [tools, setTools] = useState([]);
   const [selectedToolForCheckout, setSelectedToolForCheckout] = useState(null);
   const [selectedToolForCheckin, setSelectedToolForCheckin] = useState(null);
+  const [showScanner, setShowScanner] = useState(false); // State for scanner dialog
 
   // Fetch tools from Firestore
   useEffect(() => {
@@ -109,8 +112,9 @@ const ToolList = () => {
       <Box
         sx={{
           mb: 4,
-          display: { xs: "block", md: "flex" },
+          display: { xs: "flex", md: "flex" },
           gap: 2,
+          flexWrap: "wrap",
           justifyContent: "center",
         }}
       >
@@ -119,7 +123,7 @@ const ToolList = () => {
           color="primary"
           component={Link}
           to="/"
-          sx={{ textTransform: "none", mb: { xs: 1, md: 0 } }}
+          sx={{ textTransform: "none" }}
         >
           Tool List
         </Button>
@@ -132,7 +136,20 @@ const ToolList = () => {
         >
           Admin Panel
         </Button>
+
+        {/* Add a button to open the scanner */}
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => setShowScanner(true)}
+          sx={{ textTransform: "none" }}
+        >
+          Scan Tools
+        </Button>
       </Box>
+
+      {/* Conditionally render the scanner dialog */}
+      <CheckInOut open={showScanner} onClose={() => setShowScanner(false)} />
 
       {/* Tool Inventory Cards */}
       <Grid container spacing={2}>

@@ -8,8 +8,9 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import AddTools from "./AddTools";
-import { useAuth } from "../AuthProvider"; // For role-based access
+import { useAuth } from "../AuthProvider";
 import { Navigate } from "react-router-dom";
+import CheckInOut from "./checkInOut"; // Import Barcode Scanner Component
 
 // Material UI Imports
 import {
@@ -48,22 +49,26 @@ const AdminPanel = () => {
   const { user, role } = useAuth();
   const isAdmin = user && role === "admin";
 
-  // -----------------------------
-  // State Management
-  // -----------------------------
-  const [tools, setTools] = useState([]);
-  const [editTool, setEditTool] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+ // -----------------------------
+// State Management
+// -----------------------------
+const [tools, setTools] = useState([]);
+const [editTool, setEditTool] = useState(null);
+const [searchQuery, setSearchQuery] = useState("");
+const [showScanner, setShowScanner] = useState(false); // To toggle barcode scanner dialog
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+const [selectedTool, setSelectedTool] = useState(null); // To track tool for scanner actions
 
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [toolToDelete, setToolToDelete] = useState(null);
+const [error, setError] = useState("");
+const [success, setSuccess] = useState("");
 
-  const [checkoutHistory, setCheckoutHistory] = useState([]);
-  const [checkInHistory, setCheckInHistory] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+const [toolToDelete, setToolToDelete] = useState(null);
+
+const [checkoutHistory, setCheckoutHistory] = useState([]);
+const [checkInHistory, setCheckInHistory] = useState([]);
+const [notifications, setNotifications] = useState([]);
+
 
   // -----------------------------
   // 1) Fetch Firestore Data
@@ -234,7 +239,6 @@ const AdminPanel = () => {
       sx={{
         mt: 4,
         mb: 6,
-        // Add some responsive padding to help on mobile
         px: { xs: 2, md: 3 },
       }}
     >
@@ -256,6 +260,17 @@ const AdminPanel = () => {
       <AddTools />
 
       <Divider sx={{ my: 4 }} />
+
+      {/* Barcode Scanner Button */}
+      <Button
+        variant="contained"
+        color="secondary"
+        size="large"
+        onClick={() => setShowScanner(true)}
+        sx={{ mb: 3 }}
+      >
+        Scan Tools (Check In/Out)
+      </Button>
 
       {/* Search Tools */}
       <TextField
@@ -483,7 +498,7 @@ const AdminPanel = () => {
               <TableRow>
                 <TableCell colSpan={3} align="center">
                   No check-in history available.
-                </TableCell>
+                  </TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -570,6 +585,9 @@ const AdminPanel = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Barcode Scanner Dialog */}
+      <CheckInOut open={showScanner} onClose={() => setShowScanner(false)} />
 
       {/* Confirmation Dialog */}
       <Dialog

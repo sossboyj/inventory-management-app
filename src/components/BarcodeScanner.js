@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import BarcodeScannerComponent from "react-qr-barcode-scanner"; 
+import React, { useState, useEffect } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import { db } from "../firebaseConfig";
 import {
   collection,
@@ -19,43 +19,93 @@ import {
 } from "@mui/material";
 
 const BarcodeScanner = () => {
-  // Scanned code data
   const [scannedCode, setScannedCode] = useState(null);
-
-  // Firestore result (tool) after scanning
   const [tool, setTool] = useState(null);
-
-  // Error handling
   const [error, setError] = useState(null);
-
-  // Success message
   const [success, setSuccess] = useState("");
-
-  // Return date for check-out
   const [returnDate, setReturnDate] = useState("");
-
-  // For preventing multiple queries if the scanner picks up the same code repeatedly
   const [lastScanned, setLastScanned] = useState("");
+  const videoElementId = "video-preview";
+  let codeReader = null;
+  let videoStream = null;
 
-  // This function queries Firestore based on the newly scanned code
-  const handleFirestoreLookup = async (code) => {
+  useEffect(() => {
+    codeReader = new BrowserMultiFormatReader();
+
+    const startScanner = async () => {
+      try {
+        setError(null);
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((device) => device.kind === "videoinput");
+
+        if (videoDevices.length === 0) {
+          setError("No camera devices found. Please check your device.");
+          return;
+        }
+
+        const selectedDeviceId = videoDevices[0].deviceId;
+
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: selectedDeviceId },
+        });
+
+        const videoElement = document.getElementById(videoElementId);
+        if (videoElement) {
+          videoElement.srcObject = videoStream;
+          videoElement.play();
+
+          codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+            if (result) {
+              const code = result.text;
+              console.log("Scanned Barcode:", code);
+
+              if (code !== lastScanned) {
+                setScannedCode(code);
+                setLastScanned(code);
+                lookupFirestore(code);
+              }
+            }
+
+            if (err && err.name !== "NotFoundException") {
+              console.error("Scanner Error:", err);
+              setError("Error scanning barcode. Please try again.");
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Error initializing scanner:", e);
+        setError("An error occurred while initializing the scanner.");
+      }
+    };
+
+    startScanner();
+
+    return () => {
+      // Stop video stream on unmount
+      if (videoStream) {
+        videoStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [lastScanned]);
+
+  const lookupFirestore = async (code) => {
     try {
-      // Clear old messages
       setError(null);
       setSuccess("");
+      console.log(`Looking up barcode in Firestore: ${code}`);
 
-      // Query the tools collection for a matching barcode
       const toolsRef = collection(db, "tools");
       const q = query(toolsRef, where("barcode", "==", code));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
         setTool(null);
-        setError("Tool not found. Make sure the barcode is correct.");
+        setError("Tool not found in the inventory.");
       } else {
-        // Assume only one matching doc
         const docSnap = querySnapshot.docs[0];
         setTool({ id: docSnap.id, ...docSnap.data() });
+        setSuccess("Tool found!");
       }
     } catch (err) {
       console.error("Error querying Firestore:", err);
@@ -63,26 +113,6 @@ const BarcodeScanner = () => {
     }
   };
 
-  // This runs every time the camera detects or fails to detect a barcode
-  // 'result' is null if nothing is detected, or an object with `text` if recognized
-  const handleUpdate = (err, result) => {
-    if (err) {
-      console.error("Scanner Error:", err);
-      // Many times this might just be a 'not found' during scanning
-      // We'll only set a user-facing error if there's a real camera issue
-    }
-
-    if (result?.text) {
-      // Only handle if it's a new code (avoid repeat queries)
-      if (result.text !== lastScanned) {
-        setScannedCode(result.text);
-        setLastScanned(result.text);
-        handleFirestoreLookup(result.text);
-      }
-    }
-  };
-
-  // Check out the tool
   const handleCheckOut = async () => {
     if (!tool) return;
     try {
@@ -91,14 +121,13 @@ const BarcodeScanner = () => {
         expectedReturnDate: returnDate || null,
       });
       setSuccess(`Successfully checked out: ${tool.name}`);
-      setError(null);
+      resetState();
     } catch (err) {
-      console.error("Error checking out the tool:", err);
-      setError("Failed to check out tool. Please try again.");
+      console.error("Error checking out tool:", err);
+      setError("Failed to check out tool.");
     }
   };
 
-  // Check in the tool
   const handleCheckIn = async () => {
     if (!tool) return;
     try {
@@ -107,56 +136,50 @@ const BarcodeScanner = () => {
         expectedReturnDate: null,
       });
       setSuccess(`Successfully checked in: ${tool.name}`);
-      setError(null);
+      resetState();
     } catch (err) {
-      console.error("Error checking in the tool:", err);
-      setError("Failed to check in tool. Please try again.");
+      console.error("Error checking in tool:", err);
+      setError("Failed to check in tool.");
     }
   };
 
-  return (
-    <Box sx={{ textAlign: "center", marginTop: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Barcode Scanner
-      </Typography>
+  const resetState = () => {
+    setScannedCode(null);
+    setTool(null);
+    setReturnDate("");
+  };
 
-      {/* Display error or success messages */}
+  return (
+    <Box sx={{ textAlign: "center", mt: 2 }}>
+      <Typography variant="h5">Barcode Scanner</Typography>
+
       {error && (
-        <Alert severity="error" sx={{ my: 2 }}>
+        <Alert severity="error" sx={{ mt: 2 }}>
           {error}
         </Alert>
       )}
       {success && (
-        <Alert severity="success" sx={{ my: 2 }}>
+        <Alert severity="success" sx={{ mt: 2 }}>
           {success}
         </Alert>
       )}
 
-      {/* Camera Preview using react-qr-barcode-scanner */}
       <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
-        <BarcodeScannerComponent
-          width={320}
-          height={240}
-          onUpdate={handleUpdate}
-        />
+        <video id={videoElementId} style={{ width: "100%", maxWidth: 400 }} />
       </Box>
 
-      {/* Show scanned code */}
       {scannedCode && (
         <Typography variant="body1" sx={{ mt: 2 }}>
           Scanned Code: <strong>{scannedCode}</strong>
         </Typography>
       )}
 
-      {/* If a tool is found, show its info */}
       {tool && (
         <Paper
           elevation={3}
           sx={{ p: 2, mt: 2, width: "80%", maxWidth: 400, mx: "auto" }}
         >
-          <Typography variant="h6" gutterBottom>
-            Tool Details
-          </Typography>
+          <Typography variant="h6">Tool Details</Typography>
           <Typography>Name: {tool.name}</Typography>
           <Typography>Model: {tool.model}</Typography>
           <Typography>Status: {tool.status}</Typography>
@@ -165,9 +188,7 @@ const BarcodeScanner = () => {
             {tool.expectedReturnDate ? tool.expectedReturnDate : "None"}
           </Typography>
 
-          {/* Check Out / Check In Actions */}
           <Box sx={{ display: "flex", flexDirection: "column", mt: 2 }}>
-            {/* Return date field for check out */}
             <TextField
               type="date"
               label="Return Date"
@@ -178,7 +199,6 @@ const BarcodeScanner = () => {
               onChange={(e) => setReturnDate(e.target.value)}
               sx={{ mb: 2 }}
             />
-
             <Button
               variant="contained"
               color="primary"
