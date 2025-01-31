@@ -3,56 +3,144 @@ import { db } from "../firebaseConfig";
 import { collection, onSnapshot } from "firebase/firestore";
 import CheckOutTool from "./CheckOutTool";
 import CheckInTool from "./CheckInTools";
-import CheckInOut from "./checkInOut"; // Correct component name
+import CheckInOut from "./checkInOut"; // Scanner dialog
+
 import {
-  Box,
+  Typography,
+  TextField,
+  Select,
+  MenuItem,
+  Switch,
   Grid,
   Card,
   CardContent,
-  Typography,
-  Chip,
   CardActions,
   Button,
   CardMedia,
-  IconButton,
-  Dialog,
+  Chip,
+  Box,
+  CircularProgress,
 } from "@mui/material";
+
 import { Link } from "react-router-dom";
+
+// Icons
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import SearchIcon from "@mui/icons-material/Search";
 import BuildIcon from "@mui/icons-material/Build";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import HighlightOffIcon from "@mui/icons-material/HighlightOff";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
 
 const ToolList = () => {
+  // --------------------------------
+  // 1) State for Tools & Job Sites
+  // --------------------------------
   const [tools, setTools] = useState([]);
+  const [jobSites, setJobSites] = useState([]);
+
+  // Loading state to show a spinner
+  const [loading, setLoading] = useState(true);
+
+  // -------------------------------
+  // Check-In / Check-Out State
+  // -------------------------------
   const [selectedToolForCheckout, setSelectedToolForCheckout] = useState(null);
   const [selectedToolForCheckin, setSelectedToolForCheckin] = useState(null);
-  const [showScanner, setShowScanner] = useState(false); // State for scanner dialog
 
-  // Fetch tools from Firestore
+  // -------------------------------
+  // Scanner State
+  // -------------------------------
+  const [showScanner, setShowScanner] = useState(false);
+
+  // -------------------------------
+  // UI/UX Enhancements: Search & Filters
+  // -------------------------------
+  const [searchQuery, setSearchQuery] = useState("");
+  const [jobSiteFilter, setJobSiteFilter] = useState("");
+  const [availabilityFilter, setAvailabilityFilter] = useState("");
+
+  // -------------------------------
+  // 5) Dark Mode State
+  // -------------------------------
+  const [darkMode, setDarkMode] = useState(false);
+  const toggleDarkMode = () => setDarkMode(!darkMode);
+
+  // -------------------------------
+  // Fetch Tools from Firestore
+  // -------------------------------
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "tools"),
       (snapshot) => {
-        const toolsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name || "Unnamed Tool",
-          quantity: doc.data().quantity || 0,
-          model: doc.data().model || "N/A",
-          price: doc.data().price || 0,
-          availability: doc.data().availability || false,
-          imageUrl: doc.data().imageUrl || null, // Include tool image URL
-        }));
+        const toolsData = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: data.name || "Unnamed Tool",
+            quantity: data.quantity || 0,
+            model: data.model || "N/A",
+            price: data.price || 0,
+            availability: data.availability || false,
+            imageUrl: data.imageUrl || null,
+            jobSite:
+              data.jobSite && data.jobSite.trim() !== ""
+                ? data.jobSite
+                : "Not Assigned",
+          };
+        });
         setTools(toolsData);
+        setLoading(false); // stop spinner
       },
       (error) => {
         console.error("Error fetching tools:", error);
+        setLoading(false);
       }
     );
-
     return () => unsubscribe();
   }, []);
 
+  // -------------------------------
+  // Fetch Job Sites from Firestore
+  // -------------------------------
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "jobSites"),
+      (snapshot) => {
+        const sitesData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setJobSites(sitesData);
+      },
+      (err) => console.error("Error fetching job sites:", err)
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // -------------------------------
+  // Filtered Tools (Search, Job Site, Availability)
+  // -------------------------------
+  const filteredTools = tools.filter((tool) => {
+    const matchesSearch = tool.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+
+    const matchesJobSite =
+      !jobSiteFilter || jobSiteFilter === "" || tool.jobSite === jobSiteFilter;
+
+    const matchesAvailability =
+      !availabilityFilter ||
+      (availabilityFilter === "Available" && tool.availability) ||
+      (availabilityFilter === "Checked Out" && !tool.availability);
+
+    return matchesSearch && matchesJobSite && matchesAvailability;
+  });
+
+  // -------------------------------
+  // Check-Out & Check-In Handlers
+  // -------------------------------
   const handleCheckOutSuccess = () => {
     setSelectedToolForCheckout(null);
     alert("Tool checked out successfully!");
@@ -63,6 +151,149 @@ const ToolList = () => {
     alert("Tool checked in successfully!");
   };
 
+  // -------------------------------
+  // Render Single Tool Card
+  // -------------------------------
+  const renderToolCard = (tool) => (
+    <Card
+      key={tool.id}
+      sx={{
+        backgroundColor: darkMode ? "#1e1e1e" : "#f9f9f9", // darker for more contrast
+        color: darkMode ? "#e0e0e0" : "inherit",
+        boxShadow: darkMode ? "0px 4px 8px rgba(0,0,0,0.5)" : 2,
+        borderRadius: 2,
+        p: 1,
+        transition: "0.3s",
+        "&:hover": {
+          transform: "scale(1.03)",
+          boxShadow: darkMode
+            ? "0px 6px 10px rgba(0,0,0,0.7)"
+            : 4, // a bit deeper shadow in dark mode
+        },
+      }}
+    >
+      {/* Tool Image */}
+      {tool.imageUrl && (
+        <CardMedia
+          component="img"
+          height="140"
+          image={tool.imageUrl}
+          alt={tool.name}
+          sx={{ borderRadius: "4px" }}
+        />
+      )}
+
+      <CardContent>
+        {/* Tool Name */}
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+        >
+          <BuildIcon />
+          {tool.name}
+        </Typography>
+
+        {/* Model */}
+        <Typography variant="body2" sx={{ display: "flex", gap: 0.5 }}>
+          <BuildIcon sx={{ fontSize: 18, color: "gray" }} />
+          Model: {tool.model}
+        </Typography>
+
+        {/* Price */}
+        <Typography variant="body2" sx={{ display: "flex", gap: 0.5 }}>
+          <AttachMoneyIcon sx={{ fontSize: 18, color: "green" }} />
+          Price: ${tool.price.toFixed(2)}
+        </Typography>
+
+        {/* Job Site */}
+        <Typography variant="body2" sx={{ display: "flex", gap: 0.5 }}>
+          <LocationOnIcon sx={{ fontSize: 18, color: "blue" }} />
+          {tool.jobSite}
+        </Typography>
+
+        {/* Quantity */}
+        <Typography variant="body2" color="text.secondary">
+          Quantity: {tool.quantity}
+        </Typography>
+
+        {/* Availability Status */}
+        <Box mt={1}>
+          <Chip
+            label={tool.availability ? "Available" : "Checked Out"}
+            icon={
+              tool.availability ? <CheckCircleIcon /> : <HighlightOffIcon />
+            }
+            color={tool.availability ? "success" : "warning"}
+            size="small"
+          />
+        </Box>
+      </CardContent>
+
+      {/* Check-In / Check-Out Actions */}
+      <CardActions sx={{ justifyContent: "center" }}>
+        {tool.availability ? (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={() => setSelectedToolForCheckout(tool)}
+          >
+            Check Out
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            color="secondary"
+            size="small"
+            onClick={() => setSelectedToolForCheckin(tool)}
+          >
+            Check In
+          </Button>
+        )}
+      </CardActions>
+
+      {/* Modals for Checkout/Checkin if selected */}
+      {selectedToolForCheckout?.id === tool.id && (
+        <CheckOutTool
+          toolId={tool.id}
+          toolName={tool.name}
+          onSuccess={handleCheckOutSuccess}
+        />
+      )}
+      {selectedToolForCheckin?.id === tool.id && (
+        <CheckInTool
+          toolId={tool.id}
+          toolName={tool.name}
+          onSuccess={handleCheckInSuccess}
+        />
+      )}
+    </Card>
+  );
+
+  // -------------------------------
+  // Display Loading Spinner
+  // -------------------------------
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: "80vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: darkMode ? "#121212" : "#fff",
+          color: darkMode ? "#e0e0e0" : "inherit",
+        }}
+      >
+        <CircularProgress color="primary" />
+      </Box>
+    );
+  }
+
+  // -------------------------------
+  // If No Tools Found
+  // -------------------------------
   if (!tools.length) {
     return (
       <Typography
@@ -76,179 +307,140 @@ const ToolList = () => {
     );
   }
 
+  // -------------------------------
+  // Main Return (No Local AppBar)
+  // -------------------------------
   return (
-    <Box sx={{ padding: { xs: 2, md: 4 } }}>
-      {/* App Header */}
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: darkMode ? "#121212" : "#fff", // Full-page dark mode
+        color: darkMode ? "#e0e0e0" : "inherit",
+        transition: "background-color 0.3s ease",
+      }}
+    >
+      {/* Top Controls (Search/Filters/Buttons) */}
       <Box
         sx={{
+          p: 2,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          mb: 2,
-        }}
-      >
-        <Typography
-          variant="h4"
-          component="h1"
-          sx={{
-            fontWeight: "bold",
-            color: "#1976d2",
-            textAlign: { xs: "center", md: "left" },
-            flexGrow: 1,
-          }}
-        >
-          Tool Inventory
-        </Typography>
-        <IconButton
-          component={Link}
-          to="/"
-          sx={{ display: { xs: "flex", md: "none" }, color: "#1976d2" }}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-      </Box>
-
-      {/* Navigation Buttons */}
-      <Box
-        sx={{
-          mb: 4,
-          display: { xs: "flex", md: "flex" },
-          gap: 2,
           flexWrap: "wrap",
+          gap: 2,
+          alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Button
-          variant="contained"
-          color="primary"
-          component={Link}
-          to="/"
-          sx={{ textTransform: "none" }}
+        {/* Search */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            bgcolor: darkMode ? "#333" : "#fff",
+            borderRadius: 1,
+            px: 1,
+          }}
         >
-          Tool List
-        </Button>
-        <Button
-          variant="outlined"
-          color="primary"
-          component={Link}
-          to="/admin"
-          sx={{ textTransform: "none" }}
-        >
-          Admin Panel
-        </Button>
+          <SearchIcon sx={{ color: darkMode ? "#aaa" : "gray", mr: 1 }} />
+          <TextField
+            placeholder="Search tools..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            variant="standard"
+            sx={{ minWidth: 150, color: darkMode ? "#e0e0e0" : "#000" }}
+            InputProps={{ disableUnderline: true }}
+          />
+        </Box>
 
-        {/* Add a button to open the scanner */}
+        {/* Job Site Filter */}
+        <Select
+          value={jobSiteFilter}
+          onChange={(e) => setJobSiteFilter(e.target.value)}
+          displayEmpty
+          size="small"
+          sx={{
+            minWidth: 120,
+            bgcolor: darkMode ? "#333" : "#fff",
+            color: darkMode ? "#e0e0e0" : "#000",
+            borderRadius: 1,
+          }}
+        >
+          <MenuItem value="">
+            <em>All Job Sites</em>
+          </MenuItem>
+          {jobSites.map((site) => (
+            <MenuItem key={site.id} value={site.name}>
+              {site.name}
+            </MenuItem>
+          ))}
+        </Select>
+
+        {/* Availability Filter */}
+        <Select
+          value={availabilityFilter}
+          onChange={(e) => setAvailabilityFilter(e.target.value)}
+          displayEmpty
+          size="small"
+          sx={{
+            minWidth: 120,
+            bgcolor: darkMode ? "#333" : "#fff",
+            color: darkMode ? "#e0e0e0" : "#000",
+            borderRadius: 1,
+          }}
+        >
+          <MenuItem value="">
+            <em>All Status</em>
+          </MenuItem>
+          <MenuItem value="Available">Available</MenuItem>
+          <MenuItem value="Checked Out">Checked Out</MenuItem>
+        </Select>
+
+        {/* Dark Mode Toggle */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <DarkModeIcon />
+          <Switch checked={darkMode} onChange={toggleDarkMode} />
+        </Box>
+
+        {/* Scan Tools Button */}
         <Button
           variant="contained"
-          color="secondary"
+          sx={{
+            backgroundColor: darkMode ? "#d32f2f" : "#d32f2f", // consistent red
+            color: "#fff",
+            textTransform: "none",
+          }}
           onClick={() => setShowScanner(true)}
-          sx={{ textTransform: "none" }}
         >
           Scan Tools
         </Button>
+
+        {/* Admin Panel Button (Optional) */}
+        <Button
+          variant="outlined"
+          sx={{
+            color: darkMode ? "#e0e0e0" : "#1976d2",
+            borderColor: darkMode ? "#e0e0e0" : "#1976d2",
+            textTransform: "none",
+          }}
+          component={Link}
+          to="/admin"
+        >
+          Admin Panel
+        </Button>
       </Box>
 
-      {/* Conditionally render the scanner dialog */}
+      {/* Scanner Dialog */}
       <CheckInOut open={showScanner} onClose={() => setShowScanner(false)} />
 
-      {/* Tool Inventory Cards */}
-      <Grid container spacing={2}>
-        {tools.map((tool) => (
-          <Grid item xs={12} sm={6} md={4} key={tool.id}>
-            <Card
-              sx={{
-                backgroundColor: "#f9f9f9",
-                boxShadow: 2,
-                borderRadius: 2,
-                padding: 2,
-                transition: "0.3s",
-                "&:hover": {
-                  transform: "scale(1.03)",
-                  boxShadow: 4,
-                },
-              }}
-            >
-              {tool.imageUrl && (
-                <CardMedia
-                  component="img"
-                  height="140"
-                  image={tool.imageUrl}
-                  alt={tool.name}
-                  sx={{ borderRadius: "4px" }}
-                />
-              )}
-              <CardContent>
-                <Typography
-                  variant="h6"
-                  gutterBottom
-                  sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                >
-                  <BuildIcon />
-                  {tool.name}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Quantity: {tool.quantity}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Model: {tool.model}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Price: ${tool.price.toFixed(2)}
-                </Typography>
-                <Box mt={2}>
-                  <Chip
-                    label={tool.availability ? "Available" : "Checked Out"}
-                    icon={
-                      tool.availability ? (
-                        <CheckCircleIcon />
-                      ) : (
-                        <HighlightOffIcon />
-                      )
-                    }
-                    color={tool.availability ? "success" : "warning"}
-                    size="small"
-                  />
-                </Box>
-              </CardContent>
-              <CardActions sx={{ justifyContent: "center" }}>
-                {tool.availability ? (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    size="small"
-                    onClick={() => setSelectedToolForCheckout(tool)}
-                  >
-                    Check Out
-                  </Button>
-                ) : (
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    size="small"
-                    onClick={() => setSelectedToolForCheckin(tool)}
-                  >
-                    Check In
-                  </Button>
-                )}
-              </CardActions>
-              {selectedToolForCheckout?.id === tool.id && (
-                <CheckOutTool
-                  toolId={tool.id}
-                  toolName={tool.name}
-                  onSuccess={handleCheckOutSuccess}
-                />
-              )}
-              {selectedToolForCheckin?.id === tool.id && (
-                <CheckInTool
-                  toolId={tool.id}
-                  toolName={tool.name}
-                  onSuccess={handleCheckInSuccess}
-                />
-              )}
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+      {/* Tools Grid */}
+      <Box sx={{ p: { xs: 2, md: 4 } }}>
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          {filteredTools.map((tool) => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={tool.id}>
+              {renderToolCard(tool)}
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
     </Box>
   );
 };

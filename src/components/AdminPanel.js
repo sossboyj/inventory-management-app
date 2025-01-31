@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { db } from "../firebaseConfig";
 import {
   collection,
@@ -6,25 +6,22 @@ import {
   doc,
   deleteDoc,
   updateDoc,
+  addDoc,
   getDocs,
 } from "firebase/firestore";
-import AddTools from "./AddTools";
 import { useAuth } from "../AuthProvider";
 import { Navigate } from "react-router-dom";
-import CheckInOut from "./checkInOut"; // Import Barcode Scanner Component
+
+// Components
+import AddTools from "./AddTools";
+import CheckInOut from "./checkInOut";
 
 // Material UI Imports
 import {
+  Box,
   Container,
   Typography,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   TextField,
   Select,
   MenuItem,
@@ -37,171 +34,220 @@ import {
   DialogTitle,
   Chip,
   Divider,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Grid,
+  Card,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Switch,
 } from "@mui/material";
+
+import { createTheme, ThemeProvider } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+
+// Icons
+import { ListItemButton } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import BuildIcon from "@mui/icons-material/Build";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
+import HistoryIcon from "@mui/icons-material/History";
+import SettingsIcon from "@mui/icons-material/Settings";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LogoutIcon from "@mui/icons-material/Logout"; // NEW: for logout
+
+// Timeline (for History)
+import Timeline from "@mui/lab/Timeline";
+import TimelineItem from "@mui/lab/TimelineItem";
+import TimelineSeparator from "@mui/lab/TimelineSeparator";
+import TimelineConnector from "@mui/lab/TimelineConnector";
+import TimelineContent from "@mui/lab/TimelineContent";
+import TimelineDot from "@mui/lab/TimelineDot";
+
+const drawerWidth = 240;
 
 const AdminPanel = () => {
   // -----------------------------
   // 0) Auth & Role Check
   // -----------------------------
-  const { user, role } = useAuth();
+  const { user, role, signOutUser } = useAuth(); 
+  // ^ If your AuthProvider uses a different name, update accordingly (e.g. signOut, logout, etc.)
   const isAdmin = user && role === "admin";
 
   // -----------------------------
-  // State Management
+  // 1) State Management
   // -----------------------------
+  // Tools
   const [tools, setTools] = useState([]);
   const [editTool, setEditTool] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showScanner, setShowScanner] = useState(false); // To toggle barcode scanner dialog
-
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [toolToDelete, setToolToDelete] = useState(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
+  // Histories & Notifications
   const [checkOutHistory, setCheckOutHistory] = useState([]);
   const [checkInHistory, setCheckInHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
-  const [sortOrder, setSortOrder] = useState("desc"); // Default: Most Recent Checkout
-  const [checkInSortOrder, setCheckInSortOrder] = useState("desc"); // Default: Most Recent Check-In
+  // Sorting
+  const [sortOrder, setSortOrder] = useState("desc"); // for Check-Out
+  const [checkInSortOrder, setCheckInSortOrder] = useState("desc"); // for Check-In
 
+  // Job Sites
+  const [jobSites, setJobSites] = useState([]);
+  const [newJobSite, setNewJobSite] = useState("");
+  const [location, setLocation] = useState("");
+  const [supervisor, setSupervisor] = useState("");
+  const [editJobSite, setEditJobSite] = useState(null);
 
-  // -----------------------------
-  // 1) Refresh Histories (Reusable Function)
-  // -----------------------------
-  const refreshHistories = async () => {
-    try {
-      const checkOutSnapshot = await getDocs(collection(db, "checkOutHistory"));
-      const checkInSnapshot = await getDocs(collection(db, "checkInHistory"));
+  // Search & Scanner
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
 
-      setCheckOutHistory(
-        checkOutSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-      );
-      setCheckInHistory(
-        checkInSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-      );
-    } catch (err) {
-      console.error("Error refreshing histories:", err);
-    }
-  };
+  // Errors & Success
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  // -----------------------------
-// 2) Fetch Firestore Data
-// -----------------------------
-useEffect(() => {
-  if (!isAdmin) return; // Early return if not admin
+  // Active Section (for sidebar navigation)
+  const [activeSection, setActiveSection] = useState("dashboard");
 
-  // Tools
-  const unsubscribeTools = onSnapshot(
-    collection(db, "tools"),
-    (snapshot) => {
-      const toolsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setTools(toolsData);
-    },
-    (err) => {
-      setError("Failed to fetch tools. Please try again.");
-      console.error("Firestore Error (tools):", err);
-    }
+  // Dark Mode
+  const [darkMode, setDarkMode] = useState(false);
+  const toggleDarkMode = () => setDarkMode(!darkMode);
+
+  // MUI Theme
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: darkMode ? "dark" : "light",
+        },
+      }),
+    [darkMode]
   );
 
-  // Checkout History
-  const unsubscribeCheckOutHistory = onSnapshot(
-    collection(db, "checkOutHistory"),
-    (snapshot) => {
-      const historyData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+  // -----------------------------
+  // 2) Fetch Data from Firestore
+  // -----------------------------
+  useEffect(() => {
+    if (!isAdmin) return;
 
-      // Sort Checkout History dynamically
-      setCheckOutHistory(
-        [...historyData].sort((a, b) =>
+    // Tools
+    const unsubscribeTools = onSnapshot(
+      collection(db, "tools"),
+      (snapshot) => {
+        setTools(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      },
+      (err) => {
+        console.error("Firestore Error (tools):", err);
+        setError("Failed to fetch tools.");
+      }
+    );
+
+    // Check-Out History
+    const unsubscribeCheckOut = onSnapshot(
+      collection(db, "checkOutHistory"),
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        // Sort by timestamp
+        data.sort((a, b) =>
           sortOrder === "desc"
-            ? new Date(b.timestamp) - new Date(a.timestamp) // Newest first
-            : new Date(a.timestamp) - new Date(b.timestamp) // Oldest first
-        )
-      );
-    },
-    (err) => {
-      setError("Failed to fetch checkout history. Please try again.");
-      console.error("Firestore Error (checkOutHistory):", err);
-    }
-  );
+            ? new Date(b.timestamp) - new Date(a.timestamp)
+            : new Date(a.timestamp) - new Date(b.timestamp)
+        );
+        setCheckOutHistory(data);
+      },
+      (err) => {
+        console.error("Firestore Error (checkOutHistory):", err);
+        setError("Failed to fetch checkout history.");
+      }
+    );
 
-  // Check-In History
-  const unsubscribeCheckInHistory = onSnapshot(
-    collection(db, "checkInHistory"),
-    (snapshot) => {
-      const historyData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      // Sort Check-In History dynamically
-      setCheckInHistory(
-        [...historyData].sort((a, b) =>
+    // Check-In History
+    const unsubscribeCheckIn = onSnapshot(
+      collection(db, "checkInHistory"),
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        // Sort by timestamp
+        data.sort((a, b) =>
           checkInSortOrder === "desc"
-            ? new Date(b.timestamp) - new Date(a.timestamp) // Newest first
-            : new Date(a.timestamp) - new Date(b.timestamp) // Oldest first
-        )
-      );
-    },
-    (err) => {
-      setError("Failed to fetch check-in history. Please try again.");
-      console.error("Firestore Error (checkInHistory):", err);
-    }
-  );
+            ? new Date(b.timestamp) - new Date(a.timestamp)
+            : new Date(a.timestamp) - new Date(b.timestamp)
+        );
+        setCheckInHistory(data);
+      },
+      (err) => {
+        console.error("Firestore Error (checkInHistory):", err);
+        setError("Failed to fetch check-in history.");
+      }
+    );
 
-  // Notifications
-  const unsubscribeNotifications = onSnapshot(
-    collection(db, "notifications"),
-    (snapshot) => {
-      const notificationsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setNotifications(notificationsData);
-    },
-    (err) => {
-      setError("Failed to fetch notifications. Please try again.");
-      console.error("Firestore Error (notifications):", err);
-    }
-  );
+    // Notifications
+    const unsubscribeNotif = onSnapshot(
+      collection(db, "notifications"),
+      (snapshot) => {
+        setNotifications(
+          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        );
+      },
+      (err) => {
+        console.error("Firestore Error (notifications):", err);
+        setError("Failed to fetch notifications.");
+      }
+    );
 
-  // Cleanup on unmount
-  return () => {
-    unsubscribeTools();
-    unsubscribeCheckOutHistory();
-    unsubscribeCheckInHistory();
-    unsubscribeNotifications();
-  };
-}, [isAdmin, sortOrder, checkInSortOrder]); // Dependencies added to re-run when sort order changes
+    // Job Sites
+    const unsubscribeJobSites = onSnapshot(
+      collection(db, "jobSites"),
+      (snapshot) => {
+        setJobSites(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      },
+      (err) => {
+        console.error("Firestore Error (jobSites):", err);
+        setError("Failed to fetch job sites.");
+      }
+    );
+
+    return () => {
+      unsubscribeTools();
+      unsubscribeCheckOut();
+      unsubscribeCheckIn();
+      unsubscribeNotif();
+      unsubscribeJobSites();
+    };
+  }, [isAdmin, sortOrder, checkInSortOrder]);
 
   // -----------------------------
-  // 3) Tool Deletion
+  // 3) Tools
   // -----------------------------
-  const handleDelete = async () => {
+  // Filtered list for search
+  const filteredTools = tools.filter((tool) =>
+    tool.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Tool Deletion
+  const handleDeleteTool = async () => {
     try {
       await deleteDoc(doc(db, "tools", toolToDelete.id));
       setSuccess("Tool removed successfully!");
     } catch (error) {
-      setError("Failed to delete tool. Please try again.");
       console.error("Error deleting tool:", error);
+      setError("Failed to delete tool.");
     } finally {
       setConfirmDialogOpen(false);
     }
   };
 
-  // -----------------------------
-  // 4) Tool Update
-  // -----------------------------
+  // Tool Update
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editTool) return;
@@ -216,18 +262,103 @@ useEffect(() => {
       setSuccess("Tool updated successfully!");
       setEditTool(null);
     } catch (error) {
-      setError("Failed to update tool. Please try again.");
       console.error("Error updating tool:", error);
+      setError("Failed to update tool.");
     }
   };
 
   // -----------------------------
-  // 5) Notifications Mark as Read
+  // 4) Job Sites
+  // -----------------------------
+  const addJobSite = async () => {
+    if (!newJobSite.trim() || !location.trim() || !supervisor.trim()) {
+      setError("All fields are required.");
+      return;
+    }
+    try {
+      await addDoc(collection(db, "jobSites"), {
+        name: newJobSite,
+        location,
+        supervisor,
+        createdAt: new Date().toISOString(),
+      });
+      setNewJobSite("");
+      setLocation("");
+      setSupervisor("");
+      setSuccess("Job site added successfully!");
+    } catch (error) {
+      console.error("Error adding job site:", error);
+      setError("Failed to add job site.");
+    }
+  };
+
+  const updateJobSite = async (jobSiteId) => {
+    if (!editJobSite || !editJobSite.name || !editJobSite.location || !editJobSite.supervisor) {
+      setError("All fields are required.");
+      return;
+    }
+  
+    try {
+      await updateDoc(doc(db, "jobSites", jobSiteId), {
+        name: editJobSite.name.trim(),
+        location: editJobSite.location.trim(),
+        supervisor: editJobSite.supervisor.trim(),
+      });
+  
+      setEditJobSite(null);
+      setSuccess("Job site updated successfully!");
+    } catch (error) {
+      console.error("Error updating job site:", error);
+      setError("Failed to update job site.");
+    }
+  };
+  
+
+  const deleteJobSite = async (id) => {
+    try {
+      await deleteDoc(doc(db, "jobSites", id));
+      setSuccess("Job site deleted successfully.");
+    } catch (error) {
+      console.error("Error deleting job site:", error);
+      setError("Failed to delete job site.");
+    }
+  };
+
+  // -----------------------------
+  // 5) Check-In/Check-Out History (Timeline)
+  // -----------------------------
+  // Combine both histories into one array for the timeline
+  const combinedHistory = [
+    ...checkOutHistory.map((item) => ({
+      ...item,
+      action: "Check-Out",
+      user: item.checkedOutBy,
+    })),
+    ...checkInHistory.map((item) => ({
+      ...item,
+      action: "Check-In",
+      user: item.checkedInBy,
+    })),
+  ];
+
+  // Sort combined by timestamp (descending by default)
+  const timelineHistory = combinedHistory.sort(
+    (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+  );
+
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "N/A";
+    return new Date(timestamp).toLocaleString();
+  };
+
+  // -----------------------------
+  // 6) Notifications
   // -----------------------------
   const markAsRead = async (notificationId) => {
     try {
-      const notificationRef = doc(db, "notifications", notificationId);
-      await updateDoc(notificationRef, { status: "Read" });
+      await updateDoc(doc(db, "notifications", notificationId), {
+        status: "Read",
+      });
       setSuccess("Notification marked as read.");
     } catch (err) {
       console.error("Error marking notification as read:", err);
@@ -237,15 +368,11 @@ useEffect(() => {
 
   const markAllAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter(
-        (notification) => notification.status === "Unread"
+      const unread = notifications.filter((n) => n.status === "Unread");
+      const updates = unread.map((n) =>
+        updateDoc(doc(db, "notifications", n.id), { status: "Read" })
       );
-      const updatePromises = unreadNotifications.map((notification) =>
-        updateDoc(doc(db, "notifications", notification.id), {
-          status: "Read",
-        })
-      );
-      await Promise.all(updatePromises);
+      await Promise.all(updates);
       setSuccess("All unread notifications marked as read.");
     } catch (err) {
       console.error("Error marking all notifications as read:", err);
@@ -254,225 +381,380 @@ useEffect(() => {
   };
 
   // -----------------------------
-  // 6) Search Tools
+  // 7) Reset Histories & Notifications
   // -----------------------------
-  const filteredTools = tools.filter((tool) =>
-    tool.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  
-// -----------------------------
-  // 7) Sort History by Timestamp   
-  // -----------------------------
-    
-  // Function to toggle sorting order
-const toggleSortOrder = () => {
-  setSortOrder((prevOrder) => (prevOrder === "desc" ? "asc" : "desc"));
-};
-
-// Function to sort history by timestamp
-const sortedHistory = (history) => {
-  return [...history].sort((a, b) => {
-    return sortOrder === "desc"
-      ? new Date(b.timestamp) - new Date(a.timestamp) // Newest first
-      : new Date(a.timestamp) - new Date(b.timestamp); // Oldest first
-  });
-};
-
-// Format timestamp function
-const formatTimestamp = (timestamp) => {
-  if (!timestamp) return "N/A";
-  return new Date(timestamp).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-};
-
-// -----------------------------
-  // 8) Reset Tables (History and Notifications)
-  // -----------------------------
-
   const resetAdminPanel = async () => {
-    if (!window.confirm("Are you sure you want to clear all history and notifications? This action cannot be undone.")) {
-      return; // Cancel if user clicks "No"
-    }
-  
+    const confirmClear = window.confirm(
+      "Are you sure you want to clear all history and notifications? This action cannot be undone."
+    );
+    if (!confirmClear) return;
+
     try {
       // Delete all check-out history
-      const checkOutSnapshot = await getDocs(collection(db, "checkOutHistory"));
-      const checkOutDeletes = checkOutSnapshot.docs.map((doc) =>
-        deleteDoc(doc.ref)
-      );
-  
+      const checkOutSnap = await getDocs(collection(db, "checkOutHistory"));
+      const checkOutDeletes = checkOutSnap.docs.map((d) => deleteDoc(d.ref));
+
       // Delete all check-in history
-      const checkInSnapshot = await getDocs(collection(db, "checkInHistory"));
-      const checkInDeletes = checkInSnapshot.docs.map((doc) =>
-        deleteDoc(doc.ref)
-      );
-  
+      const checkInSnap = await getDocs(collection(db, "checkInHistory"));
+      const checkInDeletes = checkInSnap.docs.map((d) => deleteDoc(d.ref));
+
       // Delete all notifications
-      const notificationsSnapshot = await getDocs(collection(db, "notifications"));
-      const notificationsDeletes = notificationsSnapshot.docs.map((doc) =>
-        deleteDoc(doc.ref)
-      );
-  
-      // Run all deletions in parallel
-      await Promise.all([...checkOutDeletes, ...checkInDeletes, ...notificationsDeletes]);
-  
-      setSuccess("All history and notifications have been cleared!");
+      const notifSnap = await getDocs(collection(db, "notifications"));
+      const notifDeletes = notifSnap.docs.map((d) => deleteDoc(d.ref));
+
+      await Promise.all([...checkOutDeletes, ...checkInDeletes, ...notifDeletes]);
+      setSuccess("All histories and notifications have been cleared!");
     } catch (err) {
       console.error("Error clearing admin panel:", err);
-      setError("Failed to clear history and notifications. Please try again.");
+      setError("Failed to clear data.");
     }
   };
-  
+
   // -----------------------------
-  // 9) Render
+  // 8) Rendering Sections (Sidebar)
   // -----------------------------
   if (!isAdmin) {
     return <Navigate to="/" replace />;
   }
 
-  return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 6, px: { xs: 2, md: 3 } }}>
-      {/* Header */}
-        <Typography variant="h4" align="center" fontWeight="bold" gutterBottom>
-          Admin Panel
+  // -- Dashboard: Summary Cards
+  const DashboardSection = () => {
+    // Derive stats
+    const totalTools = tools.length;
+    const availableTools = tools.filter((t) => t.status === "Available").length;
+    const checkedOutTools = tools.filter((t) => t.status === "Checked Out").length;
+    const totalJobSites = jobSites.length;
+
+    return (
+      <Box sx={{ flexGrow: 1, p: 3 }}>
+        <Typography variant="h4" fontWeight="bold" gutterBottom>
+          Dashboard
         </Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ bgcolor: "primary.main", color: "white", p: 2 }}>
+              <Typography variant="h6">Total Tools</Typography>
+              <Typography variant="h4">{totalTools}</Typography>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ bgcolor: "success.main", color: "white", p: 2 }}>
+              <Typography variant="h6">Available</Typography>
+              <Typography variant="h4">{availableTools}</Typography>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ bgcolor: "error.main", color: "white", p: 2 }}>
+              <Typography variant="h6">Checked Out</Typography>
+              <Typography variant="h4">{checkedOutTools}</Typography>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ bgcolor: "info.main", color: "white", p: 2 }}>
+              <Typography variant="h6">Job Sites</Typography>
+              <Typography variant="h4">{totalJobSites}</Typography>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Additional Quick Actions */}
+        <Box sx={{ mt: 4, display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => setShowScanner(true)}
+          >
+            Scan Tools (Check In/Out)
+          </Button>
+          <Button variant="contained" color="warning" onClick={resetAdminPanel}>
+            Clear All Histories & Notifications
+          </Button>
+        </Box>
+      </Box>
+    );
+  };
+
+  // -- Tools Section
+  const ToolsSection = () => {
+    return (
+      <Box sx={{ flexGrow: 1, p: 3 }}>
+        <Typography variant="h5" fontWeight="bold" gutterBottom>
+          Manage Tools
+        </Typography>
+        {/* Add New Tools */}
         <AddTools />
-        <Divider sx={{ my: 4 }} />
 
-        {/* Scanner */}
-<Button
-  variant="contained"
-  color="secondary"
-  size="large"
-  onClick={() => setShowScanner(true)}
-  sx={{ mb: 3, mr: 3 }} // Added spacing between buttons
->
-  Scan Tools (Check In/Out)
-</Button>
-
-{/* Reset Tables */}
-<Button
-  variant="contained"
-  color="warning" // Changed to yellow for distinction
-  size="small" // Made it smaller
-  onClick={resetAdminPanel}
-  sx={{ mb: 3 }} // Consistent spacing
->
-  Clear All Histories & Notifications
-</Button>
-
+        <Divider sx={{ my: 3 }} />
         {/* Search */}
-      <TextField
-        fullWidth
-        variant="outlined"
-        placeholder="Search tools by name..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        sx={{ mb: 3 }}
-      />
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search tools by name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          sx={{ mb: 3 }}
+        />
 
-      {/* Inventory */}
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Tools Inventory
-      </Typography>
-      <TableContainer component={Paper} sx={{ mb: 4, overflowX: "auto" }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Tool Name</TableCell>
-              <TableCell>Model</TableCell>
-              <TableCell>Quantity</TableCell>
-              <TableCell>Price</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredTools.map((tool) => {
-              const isEditing = editTool?.id === tool.id;
-              return (
-                <TableRow key={tool.id}>
-                  {isEditing ? (
-                    // Editing row
-                    <>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={editTool.name}
-                          onChange={(e) =>
-                            setEditTool({ ...editTool, name: e.target.value })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={editTool.model}
-                          onChange={(e) =>
-                            setEditTool({ ...editTool, model: e.target.value })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          type="number"
-                          value={editTool.quantity}
-                          onChange={(e) =>
-                            setEditTool({
-                              ...editTool,
-                              quantity: parseInt(e.target.value, 10),
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          type="number"
-                          value={editTool.price}
-                          onChange={(e) =>
-                            setEditTool({
-                              ...editTool,
-                              price: parseFloat(e.target.value),
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          fullWidth
-                          size="small"
-                          value={editTool.status}
-                          onChange={(e) =>
-                            setEditTool({ ...editTool, status: e.target.value })
-                          }
-                        >
-                          <MenuItem value="Available">Available</MenuItem>
-                          <MenuItem value="Checked Out">Checked Out</MenuItem>
-                          <MenuItem value="Under Maintenance">
-                            Under Maintenance
-                          </MenuItem>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
+        {/* Tools Table */}
+        <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Tool Name</TableCell>
+                <TableCell>Model</TableCell>
+                <TableCell>Quantity</TableCell>
+                <TableCell>Price</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredTools.map((tool) => {
+                const isEditing = editTool?.id === tool.id;
+                return (
+                  <TableRow key={tool.id}>
+                    {isEditing ? (
+                      <>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={editTool.name}
+                            onChange={(e) =>
+                              setEditTool({ ...editTool, name: e.target.value })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={editTool.model}
+                            onChange={(e) =>
+                              setEditTool({ ...editTool, model: e.target.value })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            value={editTool.quantity}
+                            onChange={(e) =>
+                              setEditTool({
+                                ...editTool,
+                                quantity: parseInt(e.target.value, 10),
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            value={editTool.price}
+                            onChange={(e) =>
+                              setEditTool({
+                                ...editTool,
+                                price: parseFloat(e.target.value),
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            fullWidth
+                            size="small"
+                            value={editTool.status}
+                            onChange={(e) =>
+                              setEditTool({
+                                ...editTool,
+                                status: e.target.value,
+                              })
+                            }
+                          >
+                            <MenuItem value="Available">Available</MenuItem>
+                            <MenuItem value="Checked Out">Checked Out</MenuItem>
+                            <MenuItem value="Under Maintenance">
+                              Under Maintenance
+                            </MenuItem>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            size="small"
+                            onClick={handleEditSubmit}
+                            sx={{ mr: 1 }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            size="small"
+                            onClick={() => setEditTool(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell>{tool.name}</TableCell>
+                        <TableCell>{tool.model}</TableCell>
+                        <TableCell>{tool.quantity}</TableCell>
+                        <TableCell>
+                          ${tool.price ? tool.price.toFixed(2) : "0.00"}
+                        </TableCell>
+                        <TableCell>{tool.status}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            size="small"
+                            sx={{ mr: 1 }}
+                            onClick={() => setEditTool(tool)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            size="small"
+                            onClick={() => {
+                              setToolToDelete(tool);
+                              setConfirmDialogOpen(true);
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+    );
+  };
+
+  // -- Job Sites Section
+  const JobSitesSection = () => {
+    return (
+      <Box sx={{ flexGrow: 1, p: 3 }}>
+        <Typography variant="h5" fontWeight="bold" gutterBottom>
+          Manage Job Sites
+        </Typography>
+
+        {/* Add New Job Site */}
+        <Box sx={{ display: "flex", gap: 2, mt: 2, flexWrap: "wrap" }}>
+          <TextField
+            label="Job Site Name"
+            fullWidth
+            variant="outlined"
+            value={newJobSite}
+            onChange={(e) => setNewJobSite(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <TextField
+            label="Location"
+            fullWidth
+            variant="outlined"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <TextField
+            label="Supervisor"
+            fullWidth
+            variant="outlined"
+            value={supervisor}
+            onChange={(e) => setSupervisor(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={addJobSite}
+            disabled={!newJobSite || !location || !supervisor}
+          >
+            Add Job Site
+          </Button>
+        </Box>
+
+        {/* Job Site Table */}
+        <TableContainer component={Paper} sx={{ mt: 3, overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell><b>Job Site Name</b></TableCell>
+                <TableCell><b>Location</b></TableCell>
+                <TableCell><b>Supervisor</b></TableCell>
+                <TableCell><b>Actions</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {jobSites.map((site) => (
+                <TableRow key={site.id}>
+                  <TableCell>
+                    {editJobSite?.id === site.id ? (
+                      <TextField
+                      fullWidth
+                      value={editJobSite?.name || ""}
+                      onChange={(e) =>
+                        setEditJobSite((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                    />
+                    ) : (
+                      site.name
+                    )}
+                    </TableCell>
+                    <TableCell>
+                    {editJobSite?.id === site.id ? (
+                      <TextField
+                        fullWidth
+                        value={editJobSite?.location || ""}
+                        onChange={(e) =>
+                          setEditJobSite((prev) => ({ ...prev, location: e.target.value }))
+                        }
+                      />
+                    ) : (
+                      site.location
+                    )}
+                    
+                  </TableCell>
+                  <TableCell>
+                    {editJobSite?.id === site.id ? (
+                      <TextField
+                        fullWidth
+                        value={editJobSite.supervisor}
+                        onChange={(e) =>
+                          setEditJobSite({
+                            ...editJobSite,
+                            supervisor: e.target.value,
+                          })
+                        }
+                      />
+                    ) : (
+                      site.supervisor
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editJobSite?.id === site.id ? (
+                      <>
                         <Button
                           variant="contained"
                           color="primary"
                           size="small"
-                          onClick={handleEditSubmit}
                           sx={{ mr: 1 }}
+                          onClick={() => updateJobSite(site.id)}
                         >
                           Save
                         </Button>
@@ -480,231 +762,268 @@ const formatTimestamp = (timestamp) => {
                           variant="outlined"
                           color="error"
                           size="small"
-                          onClick={() => setEditTool(null)}
+                          onClick={() => setEditJobSite(null)}
                         >
                           Cancel
                         </Button>
-                      </TableCell>
-                    </>
-                  ) : (
-                    // Default row
-                    <>
-                      <TableCell>{tool.name}</TableCell>
-                      <TableCell>{tool.model}</TableCell>
-                      <TableCell>{tool.quantity}</TableCell>
-                      <TableCell>
-                        ${tool.price ? tool.price.toFixed(2) : "0.00"}
-                      </TableCell>
-                      <TableCell>{tool.status}</TableCell>
-                      <TableCell>
+                      </>
+                    ) : (
+                      <>
                         <Button
-                          variant="outlined"
-                          color="primary"
-                          size="small"
-                          sx={{ mr: 1 }}
-                          onClick={() => setEditTool(tool)}
-                        >
-                          Edit
-                        </Button>
+                              variant="outlined"
+                              color="primary"
+                              size="small"
+                              sx={{ mr: 1 }}
+                              onClick={() => setEditJobSite({ ...site })} // Ensure editJobSite is set properly
+                            >
+                              Edit
+                            </Button>
                         <Button
                           variant="outlined"
                           color="error"
                           size="small"
-                          onClick={() => {
-                            setToolToDelete(tool);
-                            setConfirmDialogOpen(true);
-                          }}
+                          onClick={() => deleteJobSite(site.id)}
                         >
-                          Remove
+                          Delete
                         </Button>
-                      </TableCell>
-                    </>
-                  )}
+                      </>
+                    )}
+                  </TableCell>
                 </TableRow>
-              );
-            })}
+              ))}
             </TableBody>
           </Table>
-          </TableContainer>
+        </TableContainer>
+      </Box>
+    );
+  };
 
-          <Button
-          variant="contained"
-          color="primary"
-          onClick={toggleSortOrder}
-          sx={{ mb: 2 }}
-          >
-          Sort Check-Out by {sortOrder === "desc" ? "Oldest" : "Most Recent"}
+  // -- History Section (Timeline)
+  const HistorySection = () => {
+    return (
+      <Box sx={{ flexGrow: 1, p: 3 }}>
+        <Typography variant="h5" fontWeight="bold" gutterBottom>
+          History (Check-In / Check-Out)
+        </Typography>
+        <Divider sx={{ mb: 3 }} />
+        <Timeline position="alternate">
+          {timelineHistory.map((item) => (
+            <TimelineItem key={item.id}>
+              <TimelineSeparator>
+                <TimelineDot
+                  color={item.action === "Check-In" ? "success" : "error"}
+                />
+                <TimelineConnector />
+              </TimelineSeparator>
+              <TimelineContent>
+                <Typography variant="h6" component="span">
+                  {item.toolName}
+                </Typography>
+                <Typography variant="body2">
+                  {item.action} by {item.user || "Unknown"} <br />
+                  {formatTimestamp(item.timestamp)}
+                </Typography>
+              </TimelineContent>
+            </TimelineItem>
+          ))}
+        </Timeline>
+      </Box>
+    );
+  };
+
+  // -- Settings Section (Notifications, etc.)
+  const SettingsSection = () => {
+    return (
+      <Box sx={{ flexGrow: 1, p: 3 }}>
+        <Typography variant="h5" fontWeight="bold" gutterBottom>
+          Settings & Notifications
+        </Typography>
+        <Divider sx={{ mb: 3 }} />
+
+        {/* Notifications */}
+        <Box sx={{ mb: 2, display: "flex", justifyContent: "space-between" }}>
+          <Typography variant="h6">Notifications</Typography>
+          <Button variant="contained" onClick={markAllAsRead}>
+            Mark All as Read
           </Button>
-
-          {/* Checkout History Table */}
-          <Typography variant="h6" sx={{ mt: 4 }}>
-          Checkout History
-          </Typography>
-          <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
+        </Box>
+        <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
-            <TableRow>
-              <TableCell>Tool Name</TableCell>
-              <TableCell>Checked Out By</TableCell>
-              <TableCell>Checkout Date</TableCell>
-            </TableRow>
+              <TableRow>
+                <TableCell>Type</TableCell>
+                <TableCell>Message</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Timestamp</TableCell>
+                <TableCell>Action</TableCell>
+              </TableRow>
             </TableHead>
             <TableBody>
-            {checkOutHistory.length > 0 ? (
-              sortedHistory(checkOutHistory).map((history) => (
-              <TableRow key={history.id}>
-                <TableCell>{history.toolName}</TableCell>
-                <TableCell>{history.checkedOutBy || "Unknown"}</TableCell>
-                <TableCell>{formatTimestamp(history.timestamp)}</TableCell>
-              </TableRow>
-              ))
-            ) : (
-              <TableRow>
-              <TableCell colSpan={3} align="center">
-                No checkout history available.
-              </TableCell>
-              </TableRow>
-            )}
+              {notifications.map((notification) => (
+                <TableRow key={notification.id}>
+                  <TableCell>
+                    <Chip
+                      icon={
+                        notification.type === "Check-In" ? (
+                          <CheckCircleIcon />
+                        ) : notification.type === "Check-Out" ? (
+                          <ExitToAppIcon />
+                        ) : null
+                      }
+                      label={notification.type}
+                      color={
+                        notification.type === "Check-In"
+                          ? "success"
+                          : notification.type === "Check-Out"
+                          ? "primary"
+                          : "default"
+                      }
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {`Tool "${notification.toolName}" was ${notification.type}`}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={notification.status}
+                      color={
+                        notification.status === "Unread" ? "warning" : "default"
+                      }
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {formatTimestamp(notification.timestamp)}
+                  </TableCell>
+                  <TableCell>
+                    {notification.status === "Unread" && (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => markAsRead(notification.id)}
+                      >
+                        Mark as Read
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
-          </TableContainer>
+        </TableContainer>
+      </Box>
+    );
+  };
 
-          <Divider sx={{ my: 4 }} />
-            <Button
-  variant="contained"
-  color="primary"
-  onClick={() => {
-    setCheckInSortOrder(checkInSortOrder === "desc" ? "asc" : "desc");
-  }}
-  sx={{ mb: 2 }}
->
-  Sort Check-In by {checkInSortOrder === "desc" ? "Oldest" : "Most Recent"}
-</Button>
+  // Decide which section to render in the main area
+  const renderMainSection = () => {
+    switch (activeSection) {
+      case "dashboard":
+        return <DashboardSection />;
+      case "tools":
+        return <ToolsSection />;
+      case "jobSites":
+        return <JobSitesSection />;
+      case "history":
+        return <HistorySection />;
+      case "settings":
+        return <SettingsSection />;
+      default:
+        return <DashboardSection />;
+    }
+  };
 
-{/* Check In History Table */}
-<Typography variant="h6" sx={{ mt: 4 }}>
-  Check-In History
-</Typography>
-<TableContainer component={Paper} sx={{ overflowX: "auto" }}>
-  <Table size="small">
-    <TableHead>
-      <TableRow>
-        <TableCell>Tool Name</TableCell>
-        <TableCell>Checked In By</TableCell>
-        <TableCell>Check-In Date</TableCell>
-      </TableRow>
-    </TableHead>
-    <TableBody>
-      {checkInHistory.length > 0 ? (
-        checkInHistory.map((history) => (
-          <TableRow key={history.id}>
-            <TableCell>{history.toolName}</TableCell>
-            <TableCell>{history.checkedInBy || "Unknown"}</TableCell>
-            <TableCell>{formatTimestamp(history.timestamp)}</TableCell>
-          </TableRow>
-        ))
-      ) : (
-        <TableRow>
-          <TableCell colSpan={3} align="center">
-            No check-in history available.
-          </TableCell>
-        </TableRow>
-      )}
-    </TableBody>
-  </Table>
-</TableContainer>
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ display: "flex" }}>
+        {/* Sidebar Drawer */}
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: drawerWidth,
+            flexShrink: 0,
+            [`& .MuiDrawer-paper`]: {
+              width: drawerWidth,
+              boxSizing: "border-box",
+            },
+          }}
+        >
+          <List>
+            <ListItem>
+              <ListItemText
+                primary="Admin Panel"
+                sx={{ fontWeight: "bold", fontSize: "1.2rem" }}
+              />
+            </ListItem>
+            <Divider />
 
-      <Divider sx={{ my: 4 }} />
+            <ListItem button onClick={() => setActiveSection("dashboard")}>
+              <ListItemIcon>
+                <DashboardIcon />
+              </ListItemIcon>
+              <ListItemText primary="Dashboard" />
+            </ListItem>
 
-      {/* Notifications Table */}
-      <Typography variant="h6" sx={{ mt: 4 }}>
-        Notifications
-      </Typography>
-      <Button
-        variant="contained"
-        color="primary"
-        size="small"
-        onClick={markAllAsRead}
-        sx={{ mb: 2 }}
-      >
-        Mark All as Read
-      </Button>
-      <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Type</TableCell>
-              <TableCell>Message</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Timestamp</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {notifications.map((notification) => (
-              <TableRow key={notification.id}>
-                <TableCell>
-                  <Chip
-                    icon={
-                      notification.type === "Check-In" ? (
-                        <CheckCircleIcon />
-                      ) : notification.type === "Check-Out" ? (
-                        <ExitToAppIcon />
-                      ) : null
-                    }
-                    label={notification.type}
-                    color={
-                      notification.type === "Check-In"
-                        ? "success"
-                        : notification.type === "Check-Out"
-                        ? "primary"
-                        : "default"
-                    }
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>
-                  {`Tool "${notification.toolName}" was ${notification.type}`}
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={notification.status}
-                    color={
-                      notification.status === "Unread" ? "warning" : "default"
-                    }
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>
-                  {new Date(notification.timestamp).toLocaleString()}
-                </TableCell>
-                <TableCell>
-                  {notification.status === "Unread" && (
-                    <Button
-                      variant="contained"
-                      size="small"
-                      onClick={() => markAsRead(notification.id)}
-                    >
-                      Mark as Read
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            <ListItem button onClick={() => setActiveSection("tools")}>
+              <ListItemIcon>
+                <BuildIcon />
+              </ListItemIcon>
+              <ListItemText primary="Manage Tools" />
+            </ListItem>
+
+            <ListItem button onClick={() => setActiveSection("jobSites")}>
+              <ListItemIcon>
+                <LocationOnIcon />
+              </ListItemIcon>
+              <ListItemText primary="Job Sites" />
+            </ListItem>
+
+            <ListItem button onClick={() => setActiveSection("history")}>
+              <ListItemIcon>
+                <HistoryIcon />
+              </ListItemIcon>
+              <ListItemText primary="History" />
+            </ListItem>
+
+            <ListItem button onClick={() => setActiveSection("settings")}>
+              <ListItemIcon>
+                <SettingsIcon />
+              </ListItemIcon>
+              <ListItemText primary="Settings" />
+            </ListItem>
+
+            <Divider />
+            {/* Toggle Dark Mode */}
+            <ListItem>
+              <ListItemIcon>
+                <DarkModeIcon />
+              </ListItemIcon>
+              <Switch checked={darkMode} onChange={toggleDarkMode} />
+            </ListItem>
+
+            <Divider />
+            {/* Logout */}
+            <ListItem button onClick={signOutUser}>
+              <ListItemIcon>
+                <LogoutIcon />
+              </ListItemIcon>
+              <ListItemText primary="Logout" />
+            </ListItem>
+          </List>
+        </Drawer>
+
+        {/* Main Content */}
+        <Box component="main" sx={{ flexGrow: 1, p: 2 }}>
+          {renderMainSection()}
+        </Box>
+      </Box>
 
       {/* Barcode Scanner Dialog */}
-      <CheckInOut
-        open={showScanner}
-        onClose={() => {
-          setShowScanner(false);
-          refreshHistories(); // Trigger histories refresh after scanner closes
-        }}
-      />
+      <CheckInOut open={showScanner} onClose={() => setShowScanner(false)} />
 
-      {/* Confirmation Dialog */}
+      {/* Confirmation Dialog (Tool Deletion) */}
       <Dialog
         open={confirmDialogOpen}
         onClose={() => setConfirmDialogOpen(false)}
@@ -712,20 +1031,19 @@ const formatTimestamp = (timestamp) => {
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this tool? This action cannot be undone.
+            Are you sure you want to delete this tool? This action cannot be
+            undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDialogOpen(false)} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={handleDelete} color="error">
+          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleDeleteTool} color="error">
             Delete
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for Errors and Success */}
+      {/* Snackbar for Errors */}
       <Snackbar
         open={Boolean(error)}
         autoHideDuration={4000}
@@ -737,6 +1055,7 @@ const formatTimestamp = (timestamp) => {
         </Alert>
       </Snackbar>
 
+      {/* Snackbar for Success */}
       <Snackbar
         open={Boolean(success)}
         autoHideDuration={4000}
@@ -747,7 +1066,7 @@ const formatTimestamp = (timestamp) => {
           {success}
         </Alert>
       </Snackbar>
-    </Container>
+    </ThemeProvider>
   );
 };
 

@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true); // Ensure loading state is accurate
-      setError(null); // Clear previous errors
+      setError(null);   // Clear previous errors
 
       if (currentUser) {
         try {
@@ -28,19 +28,21 @@ export const AuthProvider = ({ children }) => {
               email: currentUser.email,
               displayName: userData.displayName || currentUser.displayName,
             });
-            setRole(userData.role || "user"); // Default to "user" if role is missing
+            setRole(userData.role || "user"); // default to "user" if no role
             console.log("✅ Authenticated user:", {
               uid: currentUser.uid,
               email: currentUser.email,
               role: userData.role,
             });
           } else {
-            console.warn("⚠️ User document does not exist in Firestore. Creating a new one...");
-            
-            // Automatically create a Firestore entry for the new user
+            console.warn(
+              "⚠️ User document does not exist in Firestore. Creating a new one..."
+            );
+
+            // Automatically create a Firestore entry for this new user
             const newUser = {
               email: currentUser.email,
-              role: "user", // Default role for newly created users
+              role: "user", // default role for newly created users
               createdAt: new Date().toISOString(),
             };
 
@@ -52,7 +54,7 @@ export const AuthProvider = ({ children }) => {
               email: currentUser.email,
               displayName: currentUser.displayName || "",
             });
-            setRole("user"); // Assign default role
+            setRole("user");
           }
         } catch (error) {
           console.error("❌ Error fetching user data:", error);
@@ -70,7 +72,8 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  const logout = async () => {
+  // Renamed from 'logout' to 'signOutUser' for clarity & consistency
+  const signOutUser = async () => {
     try {
       await signOut(auth);
       console.log("✅ User logged out successfully.");
@@ -88,7 +91,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, logout, error }}>
+    <AuthContext.Provider value={{ user, role, signOutUser, error }}>
       {children}
     </AuthContext.Provider>
   );
