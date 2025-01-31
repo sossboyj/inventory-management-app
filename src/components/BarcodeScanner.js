@@ -8,6 +8,7 @@ import {
   getDocs,
   updateDoc,
   doc,
+  addDoc,
 } from "firebase/firestore";
 import {
   Typography,
@@ -26,11 +27,10 @@ const BarcodeScanner = () => {
   const [returnDate, setReturnDate] = useState("");
   const [lastScanned, setLastScanned] = useState("");
   const videoElementId = "video-preview";
-  let codeReader = null;
   let videoStream = null;
 
   useEffect(() => {
-    codeReader = new BrowserMultiFormatReader();
+    const codeReader = new BrowserMultiFormatReader();
 
     const startScanner = async () => {
       try {
@@ -53,7 +53,7 @@ const BarcodeScanner = () => {
         const videoElement = document.getElementById(videoElementId);
         if (videoElement) {
           videoElement.srcObject = videoStream;
-          videoElement.play();
+          videoElement.onloadedmetadata = () => videoElement.play();
 
           codeReader.decodeFromVideoElement(videoElement, (result, err) => {
             if (result) {
@@ -72,20 +72,22 @@ const BarcodeScanner = () => {
               setError("Error scanning barcode. Please try again.");
             }
           });
+        } else {
+          throw new Error("Failed to load video element.");
         }
       } catch (e) {
         console.error("Error initializing scanner:", e);
-        setError("An error occurred while initializing the scanner.");
+        setError("Unable to access camera. Please check your browser settings.");
       }
     };
 
     startScanner();
 
     return () => {
-      // Stop video stream on unmount
-      if (videoStream) {
+      if (videoStream && videoStream.getTracks) {
         videoStream.getTracks().forEach((track) => track.stop());
       }
+      codeReader.reset();
     };
   }, [lastScanned]);
 
@@ -93,8 +95,6 @@ const BarcodeScanner = () => {
     try {
       setError(null);
       setSuccess("");
-      console.log(`Looking up barcode in Firestore: ${code}`);
-
       const toolsRef = collection(db, "tools");
       const q = query(toolsRef, where("barcode", "==", code));
       const querySnapshot = await getDocs(q);
@@ -117,9 +117,18 @@ const BarcodeScanner = () => {
     if (!tool) return;
     try {
       await updateDoc(doc(db, "tools", tool.id), {
-        status: "Checked Out",
+        availability: false,
+        checkedOutBy: "User123", // Replace with actual user info
         expectedReturnDate: returnDate || null,
       });
+
+      await addDoc(collection(db, "checkOutHistory"), {
+        toolId: tool.id,
+        toolName: tool.name,
+        timestamp: new Date().toISOString(),
+        action: "Checked Out",
+      });
+
       setSuccess(`Successfully checked out: ${tool.name}`);
       resetState();
     } catch (err) {
@@ -132,9 +141,18 @@ const BarcodeScanner = () => {
     if (!tool) return;
     try {
       await updateDoc(doc(db, "tools", tool.id), {
-        status: "Available",
+        availability: true,
+        checkedOutBy: null,
         expectedReturnDate: null,
       });
+
+      await addDoc(collection(db, "checkInHistory"), {
+        toolId: tool.id,
+        toolName: tool.name,
+        timestamp: new Date().toISOString(),
+        action: "Checked In",
+      });
+
       setSuccess(`Successfully checked in: ${tool.name}`);
       resetState();
     } catch (err) {
@@ -175,41 +193,34 @@ const BarcodeScanner = () => {
       )}
 
       {tool && (
-        <Paper
-          elevation={3}
-          sx={{ p: 2, mt: 2, width: "80%", maxWidth: 400, mx: "auto" }}
-        >
+        <Paper elevation={3} sx={{ p: 2, mt: 2, width: "80%", maxWidth: 400, mx: "auto" }}>
           <Typography variant="h6">Tool Details</Typography>
           <Typography>Name: {tool.name}</Typography>
           <Typography>Model: {tool.model}</Typography>
-          <Typography>Status: {tool.status}</Typography>
-          <Typography>
-            Expected Return:{" "}
-            {tool.expectedReturnDate ? tool.expectedReturnDate : "None"}
-          </Typography>
+          <Typography>Status: {tool.availability ? "Available" : "Checked Out"}</Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", mt: 2 }}>
-            <TextField
-              type="date"
-              label="Return Date"
-              variant="outlined"
-              size="small"
-              InputLabelProps={{ shrink: true }}
-              value={returnDate}
-              onChange={(e) => setReturnDate(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-            <Button
-              variant="contained"
-              color="primary"
-              sx={{ mb: 1 }}
-              onClick={handleCheckOut}
-            >
-              Check Out
-            </Button>
-            <Button variant="contained" color="secondary" onClick={handleCheckIn}>
-              Check In
-            </Button>
+            {tool.availability ? (
+              <>
+                <TextField
+                  type="date"
+                  label="Return Date"
+                  variant="outlined"
+                  size="small"
+                  InputLabelProps={{ shrink: true }}
+                  value={returnDate}
+                  onChange={(e) => setReturnDate(e.target.value)}
+                  sx={{ mb: 2 }}
+                />
+                <Button variant="contained" color="primary" onClick={handleCheckOut}>
+                  Check Out
+                </Button>
+              </>
+            ) : (
+              <Button variant="contained" color="secondary" onClick={handleCheckIn}>
+                Check In
+              </Button>
+            )}
           </Box>
         </Paper>
       )}

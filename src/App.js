@@ -77,7 +77,7 @@ const App = () => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: "bold" }}>
-            Inventory Management App
+            Toolify
           </Typography>
         </Toolbar>
       </AppBar>

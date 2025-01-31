@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { auth, db } from "./firebaseConfig";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const AuthContext = createContext();
 
@@ -18,7 +18,9 @@ export const AuthProvider = ({ children }) => {
 
       if (currentUser) {
         try {
-          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          const userRef = doc(db, "users", currentUser.uid);
+          const userDoc = await getDoc(userRef);
+
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUser({
@@ -26,23 +28,38 @@ export const AuthProvider = ({ children }) => {
               email: currentUser.email,
               displayName: userData.displayName || currentUser.displayName,
             });
-            setRole(userData.role || "user");
-            console.log("Authenticated user:", {
+            setRole(userData.role || "user"); // Default to "user" if role is missing
+            console.log("✅ Authenticated user:", {
               uid: currentUser.uid,
               email: currentUser.email,
               role: userData.role,
             });
           } else {
-            console.warn("User document does not exist in Firestore.");
-            setUser(null);
-            setRole(null);
+            console.warn("⚠️ User document does not exist in Firestore. Creating a new one...");
+            
+            // Automatically create a Firestore entry for the new user
+            const newUser = {
+              email: currentUser.email,
+              role: "user", // Default role for newly created users
+              createdAt: new Date().toISOString(),
+            };
+
+            await setDoc(userRef, newUser);
+            console.log("✅ New user document created in Firestore:", newUser);
+
+            setUser({
+              uid: currentUser.uid,
+              email: currentUser.email,
+              displayName: currentUser.displayName || "",
+            });
+            setRole("user"); // Assign default role
           }
         } catch (error) {
-          console.error("Error fetching user data:", error);
+          console.error("❌ Error fetching user data:", error);
           setError("Failed to fetch user data. Please try again later.");
         }
       } else {
-        console.log("No user is logged in.");
+        console.log("ℹ️ No user is logged in.");
         setUser(null);
         setRole(null);
       }
@@ -56,8 +73,9 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await signOut(auth);
+      console.log("✅ User logged out successfully.");
     } catch (error) {
-      console.error("Error logging out:", error);
+      console.error("❌ Error logging out:", error);
     }
   };
 

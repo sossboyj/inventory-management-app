@@ -6,6 +6,7 @@ import {
   doc,
   deleteDoc,
   updateDoc,
+  getDocs,
 } from "firebase/firestore";
 import AddTools from "./AddTools";
 import { useAuth } from "../AuthProvider";
@@ -36,8 +37,6 @@ import {
   DialogTitle,
   Chip,
   Divider,
-  Box,
-  Grid,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
@@ -49,113 +48,144 @@ const AdminPanel = () => {
   const { user, role } = useAuth();
   const isAdmin = user && role === "admin";
 
- // -----------------------------
-// State Management
+  // -----------------------------
+  // State Management
+  // -----------------------------
+  const [tools, setTools] = useState([]);
+  const [editTool, setEditTool] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showScanner, setShowScanner] = useState(false); // To toggle barcode scanner dialog
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [toolToDelete, setToolToDelete] = useState(null);
+
+  const [checkOutHistory, setCheckOutHistory] = useState([]);
+  const [checkInHistory, setCheckInHistory] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+
+  const [sortOrder, setSortOrder] = useState("desc"); // Default: Most Recent Checkout
+  const [checkInSortOrder, setCheckInSortOrder] = useState("desc"); // Default: Most Recent Check-In
+
+
+  // -----------------------------
+  // 1) Refresh Histories (Reusable Function)
+  // -----------------------------
+  const refreshHistories = async () => {
+    try {
+      const checkOutSnapshot = await getDocs(collection(db, "checkOutHistory"));
+      const checkInSnapshot = await getDocs(collection(db, "checkInHistory"));
+
+      setCheckOutHistory(
+        checkOutSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      );
+      setCheckInHistory(
+        checkInSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      );
+    } catch (err) {
+      console.error("Error refreshing histories:", err);
+    }
+  };
+
+  // -----------------------------
+// 2) Fetch Firestore Data
 // -----------------------------
-const [tools, setTools] = useState([]);
-const [editTool, setEditTool] = useState(null);
-const [searchQuery, setSearchQuery] = useState("");
-const [showScanner, setShowScanner] = useState(false); // To toggle barcode scanner dialog
+useEffect(() => {
+  if (!isAdmin) return; // Early return if not admin
 
-const [selectedTool, setSelectedTool] = useState(null); // To track tool for scanner actions
+  // Tools
+  const unsubscribeTools = onSnapshot(
+    collection(db, "tools"),
+    (snapshot) => {
+      const toolsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setTools(toolsData);
+    },
+    (err) => {
+      setError("Failed to fetch tools. Please try again.");
+      console.error("Firestore Error (tools):", err);
+    }
+  );
 
-const [error, setError] = useState("");
-const [success, setSuccess] = useState("");
+  // Checkout History
+  const unsubscribeCheckOutHistory = onSnapshot(
+    collection(db, "checkOutHistory"),
+    (snapshot) => {
+      const historyData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-const [toolToDelete, setToolToDelete] = useState(null);
+      // Sort Checkout History dynamically
+      setCheckOutHistory(
+        [...historyData].sort((a, b) =>
+          sortOrder === "desc"
+            ? new Date(b.timestamp) - new Date(a.timestamp) // Newest first
+            : new Date(a.timestamp) - new Date(b.timestamp) // Oldest first
+        )
+      );
+    },
+    (err) => {
+      setError("Failed to fetch checkout history. Please try again.");
+      console.error("Firestore Error (checkOutHistory):", err);
+    }
+  );
 
-const [checkoutHistory, setCheckoutHistory] = useState([]);
-const [checkInHistory, setCheckInHistory] = useState([]);
-const [notifications, setNotifications] = useState([]);
+  // Check-In History
+  const unsubscribeCheckInHistory = onSnapshot(
+    collection(db, "checkInHistory"),
+    (snapshot) => {
+      const historyData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
+      // Sort Check-In History dynamically
+      setCheckInHistory(
+        [...historyData].sort((a, b) =>
+          checkInSortOrder === "desc"
+            ? new Date(b.timestamp) - new Date(a.timestamp) // Newest first
+            : new Date(a.timestamp) - new Date(b.timestamp) // Oldest first
+        )
+      );
+    },
+    (err) => {
+      setError("Failed to fetch check-in history. Please try again.");
+      console.error("Firestore Error (checkInHistory):", err);
+    }
+  );
 
-  // -----------------------------
-  // 1) Fetch Firestore Data
-  // -----------------------------
-  useEffect(() => {
-    if (!isAdmin) return; // Early return if not admin
+  // Notifications
+  const unsubscribeNotifications = onSnapshot(
+    collection(db, "notifications"),
+    (snapshot) => {
+      const notificationsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setNotifications(notificationsData);
+    },
+    (err) => {
+      setError("Failed to fetch notifications. Please try again.");
+      console.error("Firestore Error (notifications):", err);
+    }
+  );
 
-    // Tools
-    const unsubscribeTools = onSnapshot(
-      collection(db, "tools"),
-      (snapshot) => {
-        const toolsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setTools(toolsData);
-      },
-      (err) => {
-        setError("Failed to fetch tools. Please try again.");
-        console.error("Firestore Error (tools):", err);
-      }
-    );
-
-    // Checkout History
-    const unsubscribeCheckoutHistory = onSnapshot(
-      collection(db, "checkoutHistory"),
-      (snapshot) => {
-        const historyData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setCheckoutHistory(historyData);
-      },
-      (err) => {
-        setError("Failed to fetch checkout history. Please try again.");
-        console.error("Firestore Error (checkoutHistory):", err);
-      }
-    );
-
-    // Check-In History
-    const unsubscribeCheckInHistory = onSnapshot(
-      collection(db, "checkInHistory"),
-      (snapshot) => {
-        const historyData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setCheckInHistory(historyData);
-      },
-      (err) => {
-        setError("Failed to fetch check-in history. Please try again.");
-        console.error("Firestore Error (checkInHistory):", err);
-      }
-    );
-
-    // Notifications
-    const unsubscribeNotifications = onSnapshot(
-      collection(db, "notifications"),
-      (snapshot) => {
-        const notificationsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setNotifications(notificationsData);
-      },
-      (err) => {
-        setError("Failed to fetch notifications. Please try again.");
-        console.error("Firestore Error (notifications):", err);
-      }
-    );
-
-    // Cleanup on unmount
-    return () => {
-      unsubscribeTools();
-      unsubscribeCheckoutHistory();
-      unsubscribeCheckInHistory();
-      unsubscribeNotifications();
-    };
-  }, [isAdmin]);
-
-  // Redirect if not admin
-  if (!isAdmin) {
-    return <Navigate to="/" replace />;
-  }
+  // Cleanup on unmount
+  return () => {
+    unsubscribeTools();
+    unsubscribeCheckOutHistory();
+    unsubscribeCheckInHistory();
+    unsubscribeNotifications();
+  };
+}, [isAdmin, sortOrder, checkInSortOrder]); // Dependencies added to re-run when sort order changes
 
   // -----------------------------
-  // 2) Tool Deletion
+  // 3) Tool Deletion
   // -----------------------------
   const handleDelete = async () => {
     try {
@@ -170,7 +200,7 @@ const [notifications, setNotifications] = useState([]);
   };
 
   // -----------------------------
-  // 3) Tool Update
+  // 4) Tool Update
   // -----------------------------
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -192,7 +222,7 @@ const [notifications, setNotifications] = useState([]);
   };
 
   // -----------------------------
-  // 4) Notifications Mark as Read
+  // 5) Notifications Mark as Read
   // -----------------------------
   const markAsRead = async (notificationId) => {
     try {
@@ -224,55 +254,121 @@ const [notifications, setNotifications] = useState([]);
   };
 
   // -----------------------------
-  // 5) Search Tools
+  // 6) Search Tools
   // -----------------------------
   const filteredTools = tools.filter((tool) =>
     tool.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  
+// -----------------------------
+  // 7) Sort History by Timestamp   
   // -----------------------------
-  // 6) Render
+    
+  // Function to toggle sorting order
+const toggleSortOrder = () => {
+  setSortOrder((prevOrder) => (prevOrder === "desc" ? "asc" : "desc"));
+};
+
+// Function to sort history by timestamp
+const sortedHistory = (history) => {
+  return [...history].sort((a, b) => {
+    return sortOrder === "desc"
+      ? new Date(b.timestamp) - new Date(a.timestamp) // Newest first
+      : new Date(a.timestamp) - new Date(b.timestamp); // Oldest first
+  });
+};
+
+// Format timestamp function
+const formatTimestamp = (timestamp) => {
+  if (!timestamp) return "N/A";
+  return new Date(timestamp).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
+
+// -----------------------------
+  // 8) Reset Tables (History and Notifications)
   // -----------------------------
+
+  const resetAdminPanel = async () => {
+    if (!window.confirm("Are you sure you want to clear all history and notifications? This action cannot be undone.")) {
+      return; // Cancel if user clicks "No"
+    }
+  
+    try {
+      // Delete all check-out history
+      const checkOutSnapshot = await getDocs(collection(db, "checkOutHistory"));
+      const checkOutDeletes = checkOutSnapshot.docs.map((doc) =>
+        deleteDoc(doc.ref)
+      );
+  
+      // Delete all check-in history
+      const checkInSnapshot = await getDocs(collection(db, "checkInHistory"));
+      const checkInDeletes = checkInSnapshot.docs.map((doc) =>
+        deleteDoc(doc.ref)
+      );
+  
+      // Delete all notifications
+      const notificationsSnapshot = await getDocs(collection(db, "notifications"));
+      const notificationsDeletes = notificationsSnapshot.docs.map((doc) =>
+        deleteDoc(doc.ref)
+      );
+  
+      // Run all deletions in parallel
+      await Promise.all([...checkOutDeletes, ...checkInDeletes, ...notificationsDeletes]);
+  
+      setSuccess("All history and notifications have been cleared!");
+    } catch (err) {
+      console.error("Error clearing admin panel:", err);
+      setError("Failed to clear history and notifications. Please try again.");
+    }
+  };
+  
+  // -----------------------------
+  // 9) Render
+  // -----------------------------
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
-    <Container
-      maxWidth="lg"
-      sx={{
-        mt: 4,
-        mb: 6,
-        px: { xs: 2, md: 3 },
-      }}
-    >
-      {/* Page Title */}
-      <Typography
-        variant="h4"
-        align="center"
-        fontWeight="bold"
-        gutterBottom
-        sx={{ fontSize: { xs: "1.8rem", sm: "2.5rem" } }}
-      >
-        Admin Panel
-      </Typography>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 6, px: { xs: 2, md: 3 } }}>
+      {/* Header */}
+        <Typography variant="h4" align="center" fontWeight="bold" gutterBottom>
+          Admin Panel
+        </Typography>
+        <AddTools />
+        <Divider sx={{ my: 4 }} />
 
-      {/* Add Tools Section */}
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Add a New Tool
-      </Typography>
-      <AddTools />
+        {/* Scanner */}
+<Button
+  variant="contained"
+  color="secondary"
+  size="large"
+  onClick={() => setShowScanner(true)}
+  sx={{ mb: 3, mr: 3 }} // Added spacing between buttons
+>
+  Scan Tools (Check In/Out)
+</Button>
 
-      <Divider sx={{ my: 4 }} />
+{/* Reset Tables */}
+<Button
+  variant="contained"
+  color="warning" // Changed to yellow for distinction
+  size="small" // Made it smaller
+  onClick={resetAdminPanel}
+  sx={{ mb: 3 }} // Consistent spacing
+>
+  Clear All Histories & Notifications
+</Button>
 
-      {/* Barcode Scanner Button */}
-      <Button
-        variant="contained"
-        color="secondary"
-        size="large"
-        onClick={() => setShowScanner(true)}
-        sx={{ mb: 3 }}
-      >
-        Scan Tools (Check In/Out)
-      </Button>
-
-      {/* Search Tools */}
+        {/* Search */}
       <TextField
         fullWidth
         variant="outlined"
@@ -282,7 +378,7 @@ const [notifications, setNotifications] = useState([]);
         sx={{ mb: 3 }}
       />
 
-      {/* Tool Inventory Table */}
+      {/* Inventory */}
       <Typography variant="h6" sx={{ mb: 2 }}>
         Tools Inventory
       </Typography>
@@ -427,83 +523,96 @@ const [notifications, setNotifications] = useState([]);
                 </TableRow>
               );
             })}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableBody>
+          </Table>
+          </TableContainer>
 
-      {/* Checkout History Table */}
-      <Typography variant="h6" sx={{ mt: 4 }}>
-        Checkout History
-      </Typography>
-      <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
-        <Table size="small">
-          <TableHead>
+          <Button
+          variant="contained"
+          color="primary"
+          onClick={toggleSortOrder}
+          sx={{ mb: 2 }}
+          >
+          Sort Check-Out by {sortOrder === "desc" ? "Oldest" : "Most Recent"}
+          </Button>
+
+          {/* Checkout History Table */}
+          <Typography variant="h6" sx={{ mt: 4 }}>
+          Checkout History
+          </Typography>
+          <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
             <TableRow>
               <TableCell>Tool Name</TableCell>
               <TableCell>Checked Out By</TableCell>
-              <TableCell>Expected Return Date</TableCell>
               <TableCell>Checkout Date</TableCell>
             </TableRow>
-          </TableHead>
-          <TableBody>
-            {checkoutHistory.length > 0 ? (
-              checkoutHistory.map((history) => (
-                <TableRow key={history.id}>
-                  <TableCell>{history.toolName}</TableCell>
-                  <TableCell>{history.checkedOutBy}</TableCell>
-                  <TableCell>{history.returnDate || "N/A"}</TableCell>
-                  <TableCell>
-                    {new Date(history.checkoutDate).toLocaleString()}
-                  </TableCell>
-                </TableRow>
+            </TableHead>
+            <TableBody>
+            {checkOutHistory.length > 0 ? (
+              sortedHistory(checkOutHistory).map((history) => (
+              <TableRow key={history.id}>
+                <TableCell>{history.toolName}</TableCell>
+                <TableCell>{history.checkedOutBy || "Unknown"}</TableCell>
+                <TableCell>{formatTimestamp(history.timestamp)}</TableCell>
+              </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} align="center">
-                  No checkout history available.
-                </TableCell>
+              <TableCell colSpan={3} align="center">
+                No checkout history available.
+              </TableCell>
               </TableRow>
             )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableBody>
+          </Table>
+          </TableContainer>
 
-      <Divider sx={{ my: 4 }} />
+          <Divider sx={{ my: 4 }} />
+            <Button
+  variant="contained"
+  color="primary"
+  onClick={() => {
+    setCheckInSortOrder(checkInSortOrder === "desc" ? "asc" : "desc");
+  }}
+  sx={{ mb: 2 }}
+>
+  Sort Check-In by {checkInSortOrder === "desc" ? "Oldest" : "Most Recent"}
+</Button>
 
-      {/* Check-In History Table */}
-      <Typography variant="h6" sx={{ mt: 4 }}>
-        Check-In History
-      </Typography>
-      <TableContainer component={Paper} sx={{ overflowX: "auto" }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Tool Name</TableCell>
-              <TableCell>Checked In By</TableCell>
-              <TableCell>Check-In Date</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {checkInHistory.length > 0 ? (
-              checkInHistory.map((history) => (
-                <TableRow key={history.id}>
-                  <TableCell>{history.toolName}</TableCell>
-                  <TableCell>{history.checkedInBy}</TableCell>
-                  <TableCell>
-                    {new Date(history.checkInDate).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={3} align="center">
-                  No check-in history available.
-                  </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+{/* Check In History Table */}
+<Typography variant="h6" sx={{ mt: 4 }}>
+  Check-In History
+</Typography>
+<TableContainer component={Paper} sx={{ overflowX: "auto" }}>
+  <Table size="small">
+    <TableHead>
+      <TableRow>
+        <TableCell>Tool Name</TableCell>
+        <TableCell>Checked In By</TableCell>
+        <TableCell>Check-In Date</TableCell>
+      </TableRow>
+    </TableHead>
+    <TableBody>
+      {checkInHistory.length > 0 ? (
+        checkInHistory.map((history) => (
+          <TableRow key={history.id}>
+            <TableCell>{history.toolName}</TableCell>
+            <TableCell>{history.checkedInBy || "Unknown"}</TableCell>
+            <TableCell>{formatTimestamp(history.timestamp)}</TableCell>
+          </TableRow>
+        ))
+      ) : (
+        <TableRow>
+          <TableCell colSpan={3} align="center">
+            No check-in history available.
+          </TableCell>
+        </TableRow>
+      )}
+    </TableBody>
+  </Table>
+</TableContainer>
 
       <Divider sx={{ my: 4 }} />
 
@@ -587,7 +696,13 @@ const [notifications, setNotifications] = useState([]);
       </TableContainer>
 
       {/* Barcode Scanner Dialog */}
-      <CheckInOut open={showScanner} onClose={() => setShowScanner(false)} />
+      <CheckInOut
+        open={showScanner}
+        onClose={() => {
+          setShowScanner(false);
+          refreshHistories(); // Trigger histories refresh after scanner closes
+        }}
+      />
 
       {/* Confirmation Dialog */}
       <Dialog
@@ -617,7 +732,9 @@ const [notifications, setNotifications] = useState([]);
         onClose={() => setError("")}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert severity="error" onClose={() => setError("")}>{error}</Alert>
+        <Alert severity="error" onClose={() => setError("")}>
+          {error}
+        </Alert>
       </Snackbar>
 
       <Snackbar
@@ -626,7 +743,9 @@ const [notifications, setNotifications] = useState([]);
         onClose={() => setSuccess("")}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert severity="success" onClose={() => setSuccess("")}>{success}</Alert>
+        <Alert severity="success" onClose={() => setSuccess("")}>
+          {success}
+        </Alert>
       </Snackbar>
     </Container>
   );
