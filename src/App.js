@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import ToolList from "./components/ToolList";
 import AdminPanel from "./components/AdminPanel";
@@ -17,33 +17,41 @@ import {
   ListItemButton,
   ListItemText,
   Box,
+  Switch,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
 import LoadingScreen from "./components/LoadingScreen"; // Loading animation
 import Logo from "./assets/logo.svg";
 
 const App = () => {
-  const { user, role, signOutUser, loading } = useAuth(); // Include loading state
+  const { user, role, signOutUser, loading } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem("darkMode") === "true";
+  });
 
-  // Show Loading Animation while Firebase Auth Resolves
+  useEffect(() => {
+    localStorage.setItem("darkMode", darkMode);
+  }, [darkMode]);
+
   if (loading) return <LoadingScreen />;
 
-  // Toggle drawer state
   const toggleDrawer = (open) => (event) => {
-    if (
-      event.type === "keydown" &&
-      (event.key === "Tab" || event.key === "Shift")
-    ) {
+    if (event?.type === "keydown" && (event.key === "Tab" || event.key === "Shift")) {
       return;
     }
     setDrawerOpen(open);
   };
 
-  // Drawer content
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
   const DrawerList = () => (
     <Box
-      sx={{ width: 250 }}
+      sx={{ width: 250, backgroundColor: darkMode ? "#1e1e1e" : "#fff", height: "100vh", color: darkMode ? "#fff" : "#000" }}
       role="presentation"
       onClick={toggleDrawer(false)}
       onKeyDown={toggleDrawer(false)}
@@ -82,10 +90,7 @@ const App = () => {
         ) : (
           <>
             <ListItem>
-              <Typography
-                variant="body2"
-                sx={{ fontSize: "0.875rem", fontWeight: "bold" }}
-              >
+              <Typography variant="body2" sx={{ fontSize: "0.875rem", fontWeight: "bold" }}>
                 {`Logged in as: ${user.displayName || user.email}`}
               </Typography>
             </ListItem>
@@ -103,21 +108,43 @@ const App = () => {
 
   return (
     <Router>
-      {/* Application Header */}
-      <AppBar position="static" sx={{ backgroundColor: "#1976d2" }}>
-        <Toolbar>
+      {/* Navbar with Dark Mode Support */}
+      <AppBar position="sticky" sx={{ backgroundColor: darkMode ? "#121212" : "#1976d2" }}>
+        <Toolbar sx={{ display: "flex", justifyContent: "space-between", padding: "0 10px" }}>
           {/* Sidebar Menu Button */}
           <IconButton edge="start" color="inherit" aria-label="menu" onClick={toggleDrawer(true)}>
-            <MenuIcon />
+            <MenuIcon sx={{ fontSize: 30 }} />
           </IconButton>
 
-          {/* Logo */}
-          <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
-            <img src={Logo} alt="Toolify Logo" width="40" height="40" style={{ marginRight: "10px" }} />
-            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+          {/* Logo and Title */}
+          <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1, justifyContent: "center" }}>
+            <img
+              src={Logo}
+              alt="Toolify Logo"
+              width="40"
+              height="40"
+              style={{ marginRight: "10px" }}
+            />
+            <Typography variant="h6" sx={{ fontWeight: "bold", fontSize: "1.3rem" }}>
               Toolify
             </Typography>
           </Box>
+
+          {/* Dark Mode Toggle */}
+          <IconButton color="inherit" onClick={toggleDarkMode}>
+            {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
+
+          {/* Hideable Logout Button for Larger Screens */}
+          {user && (
+            <Button
+              color="inherit"
+              onClick={signOutUser}
+              sx={{ display: { xs: "none", md: "block" } }}
+            >
+              Logout
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 
@@ -127,7 +154,7 @@ const App = () => {
       </Drawer>
 
       {/* Page Content */}
-      <Box sx={{ padding: 2 }}>
+      <Box sx={{ padding: { xs: "10px", md: "20px" }, backgroundColor: darkMode ? "#1e1e1e" : "#fff", color: darkMode ? "#ffffff" : "#000000", minHeight: "100vh" }}>
         <Routes>
           <Route path="/" element={<ToolList />} />
           <Route path="/admin" element={<AdminPanel />} />

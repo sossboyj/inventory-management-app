@@ -4,8 +4,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore"; 
-import { db } from "../firebaseConfig"; 
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../firebaseConfig";
 import {
   Container,
   Card,
@@ -64,7 +64,7 @@ const SignUp = ({ darkMode }) => {
       await setDoc(doc(db, "users", user.uid), {
         fullName: formData.fullName,
         email: user.email,
-        role: "user", 
+        role: "user",
         createdAt: new Date().toISOString(),
       });
 
@@ -78,24 +78,35 @@ const SignUp = ({ darkMode }) => {
   };
 
   return (
-    <Container 
-      maxWidth="xs" 
-      sx={{ 
-        display: "flex", 
-        justifyContent: "center", 
-        alignItems: "center", 
-        minHeight: "100vh", 
+    <Container
+      maxWidth="xs"
+      sx={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "100vh",
         backgroundColor: darkMode ? "#121212" : "#f4f6f8",
         color: darkMode ? "#ffffff" : "#000",
       }}
     >
-      <Card sx={{ padding: 3, boxShadow: 3, backgroundColor: darkMode ? "#1e1e1e" : "#fff", width: "100%" }}>
+      <Card
+        sx={{
+          padding: 3,
+          boxShadow: 3,
+          backgroundColor: darkMode ? "#1e1e1e" : "#fff",
+          width: "100%",
+        }}
+      >
         <CardContent>
           <Typography variant="h5" align="center" fontWeight="bold" sx={{ mb: 2 }}>
             Create an Account
           </Typography>
 
-          {error && <Typography color="error" sx={{ mb: 2, textAlign: "center" }}>{error}</Typography>}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2, textAlign: "center" }}>
+              {error}
+            </Alert>
+          )}
 
           <form onSubmit={handleSignUp}>
             {/* Full Name */}
@@ -207,7 +218,9 @@ const SignUp = ({ darkMode }) => {
 
       {/* Error Snackbar */}
       <Snackbar open={Boolean(error)} autoHideDuration={4000} onClose={() => setError("")}>
-        <Alert severity="error" onClose={() => setError("")}>{error}</Alert>
+        <Alert severity="error" onClose={() => setError("")}>
+          {error}
+        </Alert>
       </Snackbar>
 
       {/* Success Snackbar */}
