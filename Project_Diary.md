@@ -1,117 +1,110 @@
-# **Construction Inventory Management App - Project Diary**
+# Toolify – Project Diary
 
-This diary documents the progress, decisions, and changes made during the development of the **Construction Inventory Management App**. It serves as a log to understand the project evolution and provides context for future development.
-
----
-
-## **Project Overview**
-
-The Construction Inventory Management App aims to streamline tool tracking for construction companies. It allows employees to:
-- View available tools.
-- Check out tools for specific job sites and durations.
-- Check tools back into the inventory.
-- Enable admins to manage tools, monitor checked-out and overdue items, and notify users about deadlines.
+This diary captures the progress, decisions, and milestones in developing **Toolify**, a construction inventory management application. It provides an overview of each development stage, highlights key challenges, and outlines areas for future work.
 
 ---
 
-## **Milestones**
+## Project Overview
 
-### **1. Initial Setup**
-- **Task:** Create the initial React app structure.
-- **Steps Taken:**
-  - Used `Create React App` to initialize the project.
-  - Configured `firebaseConfig.js` to connect the app to the Firestore database.
-- **Challenges:**
-  - Setting up the correct `firebaseConfig.js` file without overwriting existing configurations.
-  - Ensuring compatibility between Firebase version and the app.
+**Toolify** streamlines tool tracking for construction teams by enabling:
+
+- **Real-Time Tool Status** – See which tools are available or checked out.  
+- **Check-Out & Check-In** – Track usage durations, job sites, and return deadlines.  
+- **Admin Oversight** – Manage tools, review logs, and receive notifications of overdue items.  
 
 ---
 
-### **2. Upload Tools to Firestore**
-- **Task:** Populate the database with tool inventory.
-- **Steps Taken:**
-  - Wrote `uploadTools.js` utility to batch-upload tools to Firestore.
-  - Ensured every tool had fields like `availability`, `checkedOutBy`, `jobSite`, and `returnDate`.
-- **Challenges:**
-  - Ensuring data structure consistency for all tools.
-  - Debugging permissions issues in Firestore rules.
-- **Outcome:**
-  - Tools were successfully uploaded to Firestore.
+## Milestones
+
+### 1. Initial Setup
+- **Task:** Establish the foundational React application.  
+- **Actions Taken:**
+  - Created a React project via `Create React App`.
+  - Configured `firebaseConfig.js` to connect with Firestore.
+- **Challenges:**  
+  - Avoiding configuration conflicts.  
+  - Ensuring correct versions between Firebase and React.
+
+### 2. Upload Tools to Firestore
+- **Task:** Populate the database with tool inventory.  
+- **Actions Taken:**
+  - Implemented `uploadTools.js` to batch-import tools.
+  - Standardized fields: `availability`, `checkedOutBy`, `jobSite`, `returnDate`.
+- **Challenges:**  
+  - Maintaining consistent data structures.  
+  - Debugging Firestore permission settings.
+
+### 3. Tool List UI
+- **Task:** Present current tools and availability in `ToolList`.  
+- **Actions Taken:**
+  - Fetched tools via Firestore’s real-time `onSnapshot`.  
+  - Displayed “Check Out” buttons only for `availability: true`.
+- **Challenges:**  
+  - Ensuring the UI auto-refreshes upon data changes.
+
+### 4. Check-Out Functionality
+- **Task:** Allow users to check out tools.  
+- **Actions Taken:**
+  - Built `CheckOutTool.js` to capture user name, job site, duration, and return date.  
+  - Updated Firestore to record tool usage details.
+- **Challenges:**  
+  - Initially, the form rendered incorrectly at the bottom of the page.
+
+### 5. Check-In Functionality
+- **Task:** Let users return tools to inventory.  
+- **Actions Taken:**
+  - Created `CheckInTool.js` to reset fields and mark the tool available again.  
+  - Added “Check In” buttons for any currently checked-out tool.
+- **Challenges:**  
+  - Matching form placement with the selected tool for clarity.
+
+### 6. Admin Panel
+- **Task:** Develop an interface for tool and inventory management.  
+- **Actions Taken:**
+  - Created `AdminPanel.js` for CRUD operations, including:
+    - Viewing all tools.
+    - Adding and editing tool information.
+    - Deleting or restoring tools.
+  - Added separate routing for admins vs. regular users.
+- **Challenges:**  
+  - Configuring Firestore rules for admin privileges.  
+  - Enabling restoration of deleted tools from a “Removed Tools” list.
 
 ---
 
-### **3. Tool List UI**
-- **Task:** Create a `ToolList` component to display tools and their availability.
-- **Steps Taken:**
-  - Fetched tools dynamically from Firestore using `onSnapshot`.
-  - Added conditional rendering to show "Check Out" buttons for available tools.
-- **Challenges:**
-  - Handling real-time updates to tool availability in the UI.
+## Key Challenges & Resolutions
+
+1. **Firestore Permission Errors**  
+   - **Issue:** `FirebaseError: Missing or insufficient permissions`.  
+   - **Resolution:** Refined Firestore security rules, allowing admin-only writes while restricting standard users.
+
+2. **Real-Time Sync**  
+   - **Issue:** Ensuring immediate UI reflection of any database changes.  
+   - **Resolution:** Used Firestore’s `onSnapshot` to auto-update the React components.
+
+3. **Form Placement**  
+   - **Issue:** Check-out/in forms appeared at the bottom of the screen.  
+   - **Resolution:** Adjusted each form to render directly underneath the specific tool card.
 
 ---
 
-### **4. Check-Out Functionality**
-- **Task:** Enable users to check out tools.
-- **Steps Taken:**
-  - Created `CheckOutTool.js` to handle user input for `userName`, `jobSite`, `duration`, and `returnDate`.
-  - Updated Firestore with tool check-out details.
-  - Added error handling for missing or invalid fields.
-- **Challenges:**
-  - Debugging why the "Check Out" form initially appeared at the bottom of the page.
-  - Fixed by rendering the form beneath the selected tool.
+## Remaining Tasks
+
+1. **Overdue Notifications**  
+   - Send reminders (via Firebase Cloud Functions) when tools exceed their return date.  
+2. **Admin Panel Refinements**  
+   - Add filters for checked-out or overdue tools.  
+   - Implement direct user notifications from the Admin Panel.  
+3. **Enhanced Styling**  
+   - Refine UI/UX for a more intuitive layout and branding.  
+4. **Testing & Deployment**  
+   - Establish end-to-end tests (e.g., Jest, Cypress).  
+   - Consider a staging environment before pushing to production.
 
 ---
 
-### **5. Check-In Functionality**
-- **Task:** Enable users to check tools back into the inventory.
-- **Steps Taken:**
-  - Created `CheckInTool.js` to reset `availability` and clear check-out details.
-  - Updated the `ToolList.js` component to include "Check In" buttons for checked-out tools.
-- **Challenges:**
-  - Debugging the display of the "Check In" form beneath the selected tool.
+## Conclusion
 
----
+Over the course of developing **Toolify**, we implemented **real-time** tool tracking, user-friendly check-out/in workflows, and an **Admin Panel** for comprehensive tool management. While the fundamental features are complete, additional improvements—such as automated overdue notifications and more advanced testing—will strengthen the system in future releases.
 
-### **6. Admin Panel**
-- **Task:** Create an admin interface for managing tools.
-- **Steps Taken:**
-  - Created `AdminPanel.js` with features to:
-    - View all tools.
-    - Add new tools.
-    - Edit existing tools.
-    - Delete tools and move them to a "Removed Tools" section.
-  - Added routing to navigate between the `ToolList` and `AdminPanel`.
-- **Challenges:**
-  - Resolving Firestore permission errors for admin operations.
-  - Ensuring removed tools could be restored from the "Removed Tools" section.
-- **Outcome:**
-  - Admin panel fully functional with CRUD capabilities and tool recovery options.
-
----
-
-## **Key Challenges and Resolutions**
-
-### **1. Firestore Permission Issues**
-- **Problem:** `FirebaseError: Missing or insufficient permissions`.
-- **Solution:** Updated Firestore security rules to allow specific operations for authenticated users and admins.
-
-### **2. Real-Time Updates**
-- **Problem:** Ensuring UI updated dynamically with Firestore changes.
-- **Solution:** Used Firestore's `onSnapshot` for real-time data fetching and updates.
-
-### **3. Form Placement**
-- **Problem:** Check-out and check-in forms appeared at the bottom of the page.
-- **Solution:** Adjusted component structure to render forms beneath the respective tools.
-
----
-
-## **Remaining Tasks**
-1. **Notifications for Overdue Tools (Future Plan)**
-   - Implement Firebase Cloud Functions to notify users about overdue tools.
-2. **Refinement of Admin Panel**
-   - Add filtering options to view only checked-out or overdue tools.
-   - Add notification features to directly alert users from the admin panel.
-3. **Styling**
-   - Improve UI/UX for better user experience.
-4. **Testing and Deployment**
-   - Conduct end-to-end testing before deploying the app.
+**End of Project Diary**
